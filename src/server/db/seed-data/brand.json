@@ -1,0 +1,76 @@
+{
+  "id": "11111111-1111-4111-8111-111111111111",
+  "name": "Kettle & Co.",
+  "sections": [
+    {
+      "code": "GL-2.1",
+      "category": "Terminology",
+      "title": "Pricing words",
+      "body": "Pricing words: say \"affordable\", never \"cheap\"."
+    },
+    {
+      "code": "GL-2.3",
+      "category": "Terminology",
+      "title": "Customers not clients",
+      "body": "We say \"customers\", not \"clients\"."
+    },
+    {
+      "code": "GL-2.4",
+      "category": "Terminology",
+      "title": "Tea pouches",
+      "body": "The product is \"tea pouches\", not \"tea bags\"."
+    },
+    {
+      "code": "GL-3.1",
+      "category": "Voice",
+      "title": "Calm and warm",
+      "body": "Calm and warm. No capitals for emphasis, one \"!\" at most."
+    },
+    {
+      "code": "GL-4.2",
+      "category": "Claims",
+      "title": "Approved claims only",
+      "body": "Every factual or comparative claim must match an approved claim."
+    }
+  ],
+  "glossary": [
+    {
+      "code": "GL-2.1",
+      "badTerm": "cheap",
+      "preferredTerm": "affordable",
+      "matchMode": "word",
+      "note": "Pricing words"
+    },
+    {
+      "code": "GL-2.3",
+      "badTerm": "clients",
+      "preferredTerm": "customers",
+      "matchMode": "word",
+      "note": "Audience words"
+    },
+    {
+      "code": "GL-2.4",
+      "badTerm": "tea bags",
+      "preferredTerm": "tea pouches",
+      "matchMode": "phrase",
+      "note": "Product name"
+    }
+  ],
+  "claims": [
+    {
+      "code": "AC-1",
+      "text": "Sourced from 14 partner estates in Assam and Darjeeling.",
+      "tags": ["origin"]
+    },
+    {
+      "code": "AC-2",
+      "text": "Packaging is 100% recyclable.",
+      "tags": ["packaging"]
+    }
+  ],
+  "colours": [
+    { "name": "Kettle navy", "hex": "#1F3A5F", "maxDeviation": 10 },
+    { "name": "Monsoon gold", "hex": "#C4A35A", "maxDeviation": 10 },
+    { "name": "Steam cream", "hex": "#F4EFE6", "maxDeviation": 10 }
+  ]
+}

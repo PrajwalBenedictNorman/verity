@@ -1,0 +1,6 @@
+- Project lives at `~/Desktop/projects/verity`; Docker/Postgres is not started until asked.
+- Next.js 16 (create-next-app current) instead of pinning 14; App Router still matches the prompt.
+- `cacheComponents` and `partialPrefetching` turned off so auth cookies and review polling stay request-time.
+- next-auth v4 Credentials + JWT (prompt route shape); extra deps: `clsx`, `tailwind-merge` for class merging.
+- `EMBEDDING_DIM` is a shared constant defaulting to 1536; seed leaves embeddings null until the AI phase.
+- Demo submission is pre-normalized by hand so first run is not empty before the normalizer exists.

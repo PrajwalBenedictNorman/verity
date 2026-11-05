@@ -1,0 +1,15 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: verity
+      POSTGRES_PASSWORD: verity
+      POSTGRES_DB: verity
+    ports:
+      - "5432:5432"
+    volumes:
+      - verity_pg:/var/lib/postgresql/data
+
+volumes:
+  verity_pg:

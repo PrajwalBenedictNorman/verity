@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+:root {
+  --background: #eef1f4;
+  --panel: #ffffff;
+  --ink: #19212b;
+  --muted: #5b6675;
+  --line: #d9dfe6;
+  --brand: #1f4fd8;
+  --error: #c0283d;
+  --warn: #b7600a;
+  --question: #5b54d6;
+  --ok: #1b7f4b;
+  --font-ui: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-doc: "Source Serif 4", ui-serif, Georgia, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #10151b;
+    --panel: #18202a;
+    --ink: #e7ecf2;
+    --muted: #94a0af;
+    --line: #2a3441;
+    --brand: #6c8cff;
+    --error: #ff7085;
+    --warn: #f0a04b;
+    --question: #9d98ff;
+    --ok: #4cc38a;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-brand: var(--brand);
+  --color-error: var(--error);
+  --color-warn: var(--warn);
+  --color-question: var(--question);
+  --color-ok: var(--ok);
+  --font-sans: var(--font-hanken);
+  --font-serif: var(--font-source);
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
