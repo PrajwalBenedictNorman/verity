@@ -33,8 +33,14 @@ export async function PATCH(
       .where(and(eq(guidelineSections.id, id), eq(guidelineSections.brandId, DEFAULT_BRAND_ID)))
       .returning();
     if (!row) return jsonError("not_found", "Section not found", 404);
-    if (body.body) await embedGuideline(row.id, row.body);
-    return jsonOk(row);
+    let warning: string | undefined;
+    if (body.body) {
+      const embedded = await embedGuideline(row.id, row.body);
+      if (!embedded) {
+        warning = "Saved, but embedding failed. Claim matching will use keyword search.";
+      }
+    }
+    return jsonOk({ ...row, warning });
   } catch (err) {
     return toErrorResponse(err);
   }

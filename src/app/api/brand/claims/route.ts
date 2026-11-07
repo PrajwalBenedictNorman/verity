@@ -39,8 +39,11 @@ export async function POST(req: Request) {
       .values({ brandId: DEFAULT_BRAND_ID, ...body })
       .returning();
     if (!row) return jsonError("internal", "Could not create claim", 500);
-    await embedClaim(row.id, row.text);
-    return jsonOk(row, 201);
+    const embedded = await embedClaim(row.id, row.text);
+    const warning = embedded
+      ? undefined
+      : "Saved, but embedding failed. Claim matching will use keyword search.";
+    return jsonOk({ ...row, warning }, 201);
   } catch (err) {
     return toErrorResponse(err);
   }

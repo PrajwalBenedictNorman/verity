@@ -40,8 +40,11 @@ export async function POST(req: Request) {
       .values({ brandId: DEFAULT_BRAND_ID, ...body })
       .returning();
     if (!row) return jsonError("internal", "Could not create section", 500);
-    await embedGuideline(row.id, row.body);
-    return jsonOk(row, 201);
+    const embedded = await embedGuideline(row.id, row.body);
+    const warning = embedded
+      ? undefined
+      : "Saved, but embedding failed. Claim matching will use keyword search.";
+    return jsonOk({ ...row, warning }, 201);
   } catch (err) {
     return toErrorResponse(err);
   }

@@ -180,7 +180,12 @@ async function seed() {
     );
   }
 
-  await embedBrand(brand.id);
+  const r = await embedBrand(brand.id);
+  if (r.ok) {
+    console.log(`Embeddings: ${r.embedded}/${r.total} embedded`);
+  } else {
+    console.log(`Embeddings skipped/failed: ${r.error ?? "Unknown error"}`);
+  }
 
   const [existingDemo] = await db
     .select()
