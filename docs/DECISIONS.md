@@ -15,3 +15,4 @@
 - The review layout switches to two columns at 860px, matching the prompt, not Tailwind's default `lg` breakpoint.
 - `pnpm eval` runs fast-only when AI is unavailable and reports deep metrics as `N/A`. It requires a migrated, seeded database and cleans up its temporary submissions.
 - Binary fixtures for parser tests and the eval testset are committed because they are small and keep tests deterministic.
+- Database-backed response cache (T9) was deferred in favor of claim & tone batching (T4) and pre-embedding. Batching reduced call volume by ~85% (from 27 calls to 3 calls on the demo submission) without requiring cache invalidation complexity or extra database migrations across brand rule edits. The "Retry deep checks" endpoint and UI button were implemented to allow instant recovery from rate limits, timeouts, or transient outages.
