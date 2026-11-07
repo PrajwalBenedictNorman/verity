@@ -29,6 +29,24 @@ export function ReviewLog({
     structured.push(
       `Retrieval: ${deep.retrieval}; ${deep.externalCalls} external calls; sent to external: ${deep.sentToExternal}.`,
     );
+
+    const extras: string[] = [];
+    if (deep.retries && deep.retries > 0) {
+      extras.push(`${deep.retries} retry attempt(s) were made.`);
+    }
+    if (deep.cacheHits && deep.cacheHits > 0) {
+      extras.push(`${deep.cacheHits} response(s) were served from cache.`);
+    }
+    if (deep.partial) {
+      extras.push("Partial results: claim checks completed before deep tier halted.");
+    }
+    if (deep.fallbackUsed) {
+      extras.push("Fallback model was used for completion.");
+    }
+    if (extras.length > 0) {
+      structured.push(extras.join(" "));
+    }
+
     structured.push(
       `Source-or-silence dropped ${disclosure.dropped} finding(s).`,
     );

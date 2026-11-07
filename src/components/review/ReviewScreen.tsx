@@ -97,6 +97,43 @@ export function ReviewScreen({
     return Boolean(status && ["done", "skipped", "failed"].includes(status));
   }, [data.latestReview]);
 
+  const retryableCodes = useMemo(
+    () =>
+      new Set([
+        "rate_limited",
+        "provider_unavailable",
+        "timeout",
+        "quota_exceeded",
+        "interrupted",
+      ]),
+    [],
+  );
+  const errorCode = data.latestReview?.disclosure?.deep?.errorCode;
+  const retryableError = errorCode ? retryableCodes.has(errorCode) : true;
+
+  async function retryDeepChecks() {
+    setError(null);
+    try {
+      await api<{ reviewId: string; deepStatus: string }>(
+        `/api/submissions/${data.submission.id}/review/deep`,
+        { method: "POST" },
+      );
+      setData((prev) => ({
+        ...prev,
+        latestReview: prev.latestReview
+          ? {
+              ...prev.latestReview,
+              deepStatus: "running",
+            }
+          : null,
+      }));
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to retry deep checks",
+      );
+    }
+  }
+
   async function runReview() {
     setError(null);
     if (editing) {
@@ -191,10 +228,23 @@ export function ReviewScreen({
         </p>
       ) : null}
       {data.latestReview?.deepStatus === "failed" ? (
-        <p className="mb-4 rounded-md border border-error bg-panel px-3 py-2 text-sm text-error">
-          Deep checks failed. Fast results are still shown and the score is
-          partial.
-        </p>
+        <div className="mb-4 rounded-md border border-error/40 bg-error/10 p-3 text-sm text-error">
+          <p className="font-semibold">Deep checks failed. Fast results are shown below.</p>
+          {data.latestReview.disclosure?.deep?.errorMessage ? (
+            <p className="mt-1 text-sm opacity-90">
+              {data.latestReview.disclosure.deep.errorMessage}
+            </p>
+          ) : null}
+          {retryableError && canAct ? (
+            <button
+              type="button"
+              onClick={retryDeepChecks}
+              className="mt-2 inline-flex items-center rounded bg-error px-2.5 py-1 text-xs font-medium text-white hover:bg-error/90 cursor-pointer"
+            >
+              Retry deep checks
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {error ? <p className="mb-3 text-sm text-error">{error}</p> : null}
       <div className="mb-3 flex gap-2">
