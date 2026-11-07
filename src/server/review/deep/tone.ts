@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { AI_TIMEOUT_MS } from "@/lib/config";
 import type { AiAdapter } from "@/server/ai/adapter";
+import { AiError } from "@/server/ai/errors";
 import type { NormalizedDocument } from "@/server/ingest/types";
 import type { Finding } from "../types";
 import { TONE_SYSTEM } from "./prompts";
 import { withRetries } from "./retry";
+import { createDeepStats, type DeepStats } from "./stats";
 
 export const toneSchema = z.object({
   issues: z.array(
@@ -19,13 +21,14 @@ export const toneSchema = z.object({
   ),
 });
 
-function chunkText(doc: NormalizedDocument, size = 1500) {
+function chunkText(doc: NormalizedDocument, size?: number) {
+  const chunkSize = size ?? Number(process.env.AI_TONE_CHUNK_CHARS ?? 6000);
   const chunks: { text: string; blockIds: string[] }[] = [];
   let buf = "";
   let ids: string[] = [];
   for (const block of doc.blocks) {
     const next = `${block.id}: ${block.text}\n`;
-    if (buf.length + next.length > size && buf.length > 0) {
+    if (buf.length + next.length > chunkSize && buf.length > 0) {
       chunks.push({ text: buf, blockIds: ids });
       buf = "";
       ids = [];
@@ -41,26 +44,42 @@ export async function analyseTone(args: {
   doc: NormalizedDocument;
   voiceSections: { code: string; body: string }[];
   adapter: AiAdapter;
+  ctx?: DeepStats;
+  deadline?: number;
 }): Promise<{ findings: Finding[]; discarded: number; externalCalls: number }> {
+  const ctx = args.ctx ?? createDeepStats();
   if (args.voiceSections.length === 0 || args.doc.blocks.length === 0) {
-    return { findings: [], discarded: 0, externalCalls: 0 };
+    return { findings: [], discarded: 0, externalCalls: ctx.calls };
   }
   const findings: Finding[] = [];
   let discarded = 0;
-  let externalCalls = 0;
   for (const chunk of chunkText(args.doc)) {
-    const result = await withRetries(() =>
-      args.adapter.complete({
-        system: TONE_SYSTEM,
-        user: JSON.stringify({
-          voice_sections: args.voiceSections,
-          blocks: chunk.text,
+    if (args.deadline && Date.now() > args.deadline) {
+      throw new AiError(
+        "timeout",
+        false,
+        undefined,
+        undefined,
+        "Deep review budget exceeded",
+      );
+    }
+
+    const result = await withRetries(
+      () =>
+        args.adapter.complete({
+          system: TONE_SYSTEM,
+          user: JSON.stringify({
+            voice_sections: args.voiceSections,
+            blocks: chunk.text,
+          }),
+          schema: toneSchema,
+          timeoutMs: AI_TIMEOUT_MS,
         }),
-        schema: toneSchema,
-        timeoutMs: AI_TIMEOUT_MS,
-      }),
+      { ctx },
     );
-    externalCalls += 1;
+    if (result.calls > 1) {
+      ctx.calls += result.calls - 1;
+    }
     const data = toneSchema.parse(result.data);
     for (const issue of data.issues) {
       const block = args.doc.blocks.find((b) => b.id === issue.blockId);
@@ -95,5 +114,5 @@ export async function analyseTone(args: {
       });
     }
   }
-  return { findings, discarded, externalCalls };
+  return { findings, discarded, externalCalls: ctx.calls };
 }

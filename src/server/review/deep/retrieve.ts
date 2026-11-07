@@ -108,21 +108,46 @@ async function vectorGuidelines(brandId: string, vector: number[], k: number) {
 export async function retrieveForSentence(
   brandId: string,
   sentence: string,
+  vector?: number[] | null,
 ): Promise<{
   claims: Retrieved[];
   guidelines: Retrieved[];
   mode: RetrievalMode;
   externalCalls: number;
 }> {
+  if (vector) {
+    const [claims, guidelines] = await Promise.all([
+      vectorClaims(brandId, vector, 3),
+      vectorGuidelines(brandId, vector, 3),
+    ]);
+    if (claims.length + guidelines.length > 0) {
+      return { claims, guidelines, mode: "vector", externalCalls: 0 };
+    }
+    return {
+      claims: await keywordClaims(brandId, sentence, 3),
+      guidelines: await keywordGuidelines(brandId, sentence, 3),
+      mode: "keyword",
+      externalCalls: 0,
+    };
+  }
+
+  if (vector === null) {
+    const [claims, guidelines] = await Promise.all([
+      keywordClaims(brandId, sentence, 3),
+      keywordGuidelines(brandId, sentence, 3),
+    ]);
+    return { claims, guidelines, mode: "keyword", externalCalls: 0 };
+  }
+
   if (embeddingsConfigured()) {
     try {
       const adapter = getAdapter();
       const { vectors } = await adapter.embed([sentence]);
-      const vector = vectors[0];
-      if (vector) {
+      const v = vectors[0];
+      if (v) {
         const [claims, guidelines] = await Promise.all([
-          vectorClaims(brandId, vector, 3),
-          vectorGuidelines(brandId, vector, 3),
+          vectorClaims(brandId, v, 3),
+          vectorGuidelines(brandId, v, 3),
         ]);
         if (claims.length + guidelines.length > 0) {
           return { claims, guidelines, mode: "vector", externalCalls: 1 };
@@ -134,10 +159,11 @@ export async function retrieveForSentence(
           externalCalls: 1,
         };
       }
-    } catch (err) {
-      console.error("vector retrieval failed", err);
+    } catch {
+      // ignore and fall back to keyword
     }
   }
+
   const [claims, guidelines] = await Promise.all([
     keywordClaims(brandId, sentence, 3),
     keywordGuidelines(brandId, sentence, 3),
