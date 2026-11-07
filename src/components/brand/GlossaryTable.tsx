@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { apiRequest } from "@/lib/api-client";
 
 type Term = {
   id: string;
@@ -25,19 +26,35 @@ export function GlossaryTable({
     preferredTerm: "",
     matchMode: "word",
   });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function create() {
-    await fetch("/api/brand/glossary", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    router.refresh();
+    setBusy(true);
+    setError(null);
+    try {
+      await apiRequest("/api/brand/glossary", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setForm({ ...form, badTerm: "", preferredTerm: "" });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add term");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
-    await fetch(`/api/brand/glossary/${id}`, { method: "DELETE" });
-    router.refresh();
+    setError(null);
+    try {
+      await apiRequest(`/api/brand/glossary/${id}`, { method: "DELETE" });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete term");
+    }
   }
 
   return (
@@ -108,11 +125,16 @@ export function GlossaryTable({
             <option value="word">word</option>
             <option value="phrase">phrase</option>
           </select>
-          <button type="submit" className="rounded-md bg-brand px-3 py-1.5 text-white">
+          <button
+            type="submit"
+            disabled={busy}
+            className="rounded-md bg-brand px-3 py-1.5 text-white disabled:opacity-50"
+          >
             Add term
           </button>
         </form>
       ) : null}
+      {error ? <p className="mt-2 text-sm text-error">{error}</p> : null}
     </section>
   );
 }

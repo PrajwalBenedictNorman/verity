@@ -31,13 +31,25 @@ export async function GET(
     ? (await db.select().from(findings).where(eq(findings.reviewId, review.id))).map(rowToFinding)
     : [];
   const log = await db
-    .select()
+    .select({
+      id: activityLog.id,
+      action: activityLog.action,
+      detail: activityLog.detail,
+      createdAt: activityLog.createdAt,
+      actorName: users.name,
+    })
     .from(activityLog)
+    .leftJoin(users, eq(users.id, activityLog.actorId))
     .where(eq(activityLog.submissionId, row.id))
     .orderBy(asc(activityLog.createdAt));
+  const approvedBy = [...log]
+    .reverse()
+    .find((entry) => entry.action === "approve")?.actorName;
   return jsonOk({
     submission: row,
     creatorName: creator?.name ?? "Unknown",
+    approvedBy: approvedBy ?? null,
+    activity: log,
     latestReview: review
       ? {
           id: review.id,
@@ -51,7 +63,6 @@ export async function GET(
         }
       : null,
     findings: reviewFindings,
-    activity: log,
   });
 }
 

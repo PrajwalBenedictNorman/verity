@@ -4,6 +4,7 @@ import { forbidUnless, requireApiUser } from "@/server/auth/api";
 import { getDb } from "@/server/db/client";
 import { findings, reviews, submissions } from "@/server/db/schema";
 import { logActivity, startReview } from "@/server/review/orchestrator";
+import { transition } from "@/server/workflow/transitions";
 import type { NormalizedDocument } from "@/server/ingest/types";
 
 export const dynamic = "force-dynamic";
@@ -47,11 +48,27 @@ export async function POST(
       finding.suggestion +
       block.text.slice(finding.endOffset);
     doc.stats.chars = doc.blocks.reduce((n, b) => n + b.text.length, 0);
+    const nextStatus = transition(submission.status, "edit_content", user.role);
+    if (!nextStatus.ok) {
+      return jsonError("forbidden", nextStatus.error, 403);
+    }
     await db
       .update(submissions)
-      .set({ normalized: doc, updatedAt: new Date() })
+      .set({
+        normalized: doc,
+        status: nextStatus.status,
+        updatedAt: new Date(),
+      })
       .where(eq(submissions.id, submission.id));
     await db.update(findings).set({ state: "applied" }).where(eq(findings.id, finding.id));
+    if (submission.status === "approved" && nextStatus.status === "draft") {
+      await logActivity(
+        submission.id,
+        user.id,
+        "edit_after_approval",
+        "Applying a fix returned this to draft.",
+      );
+    }
     await logActivity(
       submission.id,
       user.id,

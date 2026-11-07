@@ -1,6 +1,7 @@
 "use client";
 
-import type { NormalizedDocument } from "@/server/ingest/types";
+import { Fragment } from "react";
+import type { ImageRef, NormalizedDocument } from "@/server/ingest/types";
 import type { Finding } from "@/server/review/types";
 
 function decoration(severity: Finding["severity"]) {
@@ -34,6 +35,7 @@ function BlockText({
     if (f.start > cursor) parts.push(text.slice(cursor, f.start));
     parts.push(
       <mark
+        id={`mark-${f.id}`}
         key={f.id}
         className={`cursor-pointer bg-transparent ${decoration(f.severity)} ${
           selectedId === f.id ? "outline outline-2 outline-brand" : ""
@@ -52,6 +54,19 @@ function BlockText({
   }
   if (cursor < text.length) parts.push(text.slice(cursor));
   return <>{parts}</>;
+}
+
+function DocImage({ image }: { image: ImageRef }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`/api/files/${image.storagePath}`}
+      alt={image.alt ?? ""}
+      width={image.width || undefined}
+      height={image.height || undefined}
+      className="max-w-full rounded-md border border-line"
+    />
+  );
 }
 
 export function DocumentView({
@@ -79,52 +94,49 @@ export function DocumentView({
           Image stored. Text checks need text; image checks arrive with the visual audit.
         </p>
         {doc.images.map((img) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={img.id}
-            src={`/api/files/${img.storagePath}`}
-            alt={img.alt ?? ""}
-            width={img.width || undefined}
-            height={img.height || undefined}
-            className="max-w-full rounded-md border border-line"
-          />
+          <DocImage key={img.id} image={img} />
         ))}
       </div>
     );
   }
+
+  const blockIds = new Set(doc.blocks.map((b) => b.id));
+  const trailingImages = doc.images.filter(
+    (img) => !img.afterBlockId || !blockIds.has(img.afterBlockId),
+  );
 
   return (
     <div className="space-y-4 font-serif text-[1.05rem] leading-7">
       {doc.blocks.map((block) => {
         const Tag =
           block.kind === "heading"
-            ? (("h2" as const) )
+            ? ("h2" as const)
             : block.kind === "list_item"
               ? ("li" as const)
               : ("p" as const);
         const className =
           block.kind === "heading" ? "font-sans text-xl font-semibold" : undefined;
+        const images = doc.images.filter(
+          (img) => img.afterBlockId === block.id,
+        );
         return (
-          <Tag key={block.id} className={className}>
-            <BlockText
-              text={block.text}
-              findings={findings.filter((f) => f.blockId === block.id)}
-              selectedId={selectedId}
-              onSelect={onSelect}
-            />
-          </Tag>
+          <Fragment key={block.id}>
+            <Tag id={`block-${block.id}`} className={className}>
+              <BlockText
+                text={block.text}
+                findings={findings.filter((f) => f.blockId === block.id)}
+                selectedId={selectedId}
+                onSelect={onSelect}
+              />
+            </Tag>
+            {images.map((img) => (
+              <DocImage key={img.id} image={img} />
+            ))}
+          </Fragment>
         );
       })}
-      {doc.images.map((img) => (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={img.id}
-          src={`/api/files/${img.storagePath}`}
-          alt={img.alt ?? ""}
-          width={img.width || undefined}
-          height={img.height || undefined}
-          className="max-w-full rounded-md border border-line"
-        />
+      {trailingImages.map((img) => (
+        <DocImage key={img.id} image={img} />
       ))}
     </div>
   );

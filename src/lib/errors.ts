@@ -21,6 +21,14 @@ export function toErrorResponse(err: unknown) {
   if (err instanceof AppError) {
     return jsonError(err.code, err.message, err.status);
   }
+  if (
+    err &&
+    typeof err === "object" &&
+    "code" in err &&
+    err.code === "23505"
+  ) {
+    return jsonError("conflict", "That code already exists", 409);
+  }
   console.error(err);
   return jsonError("internal", "Something went wrong", 500);
 }

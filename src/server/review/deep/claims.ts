@@ -5,6 +5,8 @@ import type { Finding } from "../types";
 import { extractClaimCandidates, isHardFactualClaim } from "./candidates";
 import { CLAIM_VERDICT_SYSTEM } from "./prompts";
 import { retrieveForSentence, type Retrieved } from "./retrieve";
+import { withRetries } from "./retry";
+import { pickSafeRewrite } from "./rewrite";
 import type { NormalizedDocument } from "@/server/ingest/types";
 
 export const claimVerdictSchema = z.object({
@@ -15,19 +17,6 @@ export const claimVerdictSchema = z.object({
   suggested_rewrite: z.string().nullable(),
 });
 
-async function withRetries<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
-  let last: unknown;
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await fn();
-    } catch (err) {
-      last = err;
-      await new Promise((r) => setTimeout(r, 300 * 2 ** i));
-    }
-  }
-  throw last;
-}
-
 export async function verifyClaims(args: {
   brandId: string;
   doc: NormalizedDocument;
@@ -36,18 +25,26 @@ export async function verifyClaims(args: {
 }): Promise<{
   findings: Finding[];
   verified: string[];
+  discarded: number;
   externalCalls: number;
-  retrieval: "vector" | "keyword";
+  retrieval: "vector" | "keyword" | "none";
 }> {
   const candidates = extractClaimCandidates(args.doc.blocks);
   const findings: Finding[] = [];
   const verified: string[] = [];
+  let discarded = 0;
   let externalCalls = 0;
-  let retrieval: "vector" | "keyword" = "keyword";
+  let retrieval: "vector" | "keyword" | "none" = "none";
 
   for (const candidate of candidates) {
     const retrieved = await retrieveForSentence(args.brandId, candidate.sentence);
-    retrieval = retrieved.mode;
+    externalCalls += retrieved.externalCalls;
+    if (retrieval === "none") {
+      retrieval = retrieved.mode;
+    } else if (retrieved.mode === "keyword") {
+      retrieval = "keyword";
+    }
+
     const user = JSON.stringify({
       sentence: candidate.sentence,
       approved_claims: retrieved.claims.map((c: Retrieved) => ({
@@ -69,18 +66,21 @@ export async function verifyClaims(args: {
     );
     externalCalls += 1;
     const data = claimVerdictSchema.parse(result.data);
+    const citedClaim = retrieved.claims.find(
+      (claim) => claim.code === data.cited_source_code,
+    );
+
     if (data.verdict === "supported") {
-      if (data.cited_source_code) verified.push(data.cited_source_code);
+      if (citedClaim) verified.push(citedClaim.code);
       continue;
     }
     if (data.verdict === "not_a_claim") continue;
 
-    const cited = data.cited_source_code;
-    const fromClaims = retrieved.claims.find((c) => c.code === cited);
-    const fromGuide = retrieved.guidelines.find((g) => g.code === cited);
-    const policy = args.claimsPolicy;
-
     if (data.verdict === "contradicted") {
+      if (!citedClaim) {
+        discarded += 1;
+        continue;
+      }
       findings.push({
         id: crypto.randomUUID(),
         tier: "deep",
@@ -94,17 +94,25 @@ export async function verifyClaims(args: {
         message: data.explanation,
         source: {
           type: "claim",
-          code: fromClaims?.code ?? cited ?? "AC-?",
-          snapshot: fromClaims?.text ?? data.explanation,
+          code: citedClaim.code,
+          snapshot: citedClaim.text,
         },
-        suggestion: data.suggested_rewrite,
+        suggestion: pickSafeRewrite(data.suggested_rewrite, retrieved.claims),
         state: "open",
       });
       continue;
     }
 
-    const sourceCode = policy?.code ?? fromGuide?.code ?? cited ?? "GL-4.2";
-    const snapshot = policy?.body ?? fromGuide?.text ?? data.explanation;
+    const citedGuide = retrieved.guidelines.find(
+      (guide) => guide.code === data.cited_source_code,
+    );
+    const sourceCode = args.claimsPolicy?.code ?? citedGuide?.code;
+    if (!sourceCode) {
+      discarded += 1;
+      continue;
+    }
+    const snapshot =
+      args.claimsPolicy?.body ?? citedGuide?.text ?? data.explanation;
     findings.push({
       id: crypto.randomUUID(),
       tier: "deep",
@@ -117,10 +125,16 @@ export async function verifyClaims(args: {
       matchedText: candidate.sentence,
       message: data.explanation,
       source: { type: "guideline", code: sourceCode, snapshot },
-      suggestion: data.suggested_rewrite,
+      suggestion: pickSafeRewrite(data.suggested_rewrite, retrieved.claims),
       state: "open",
     });
   }
 
-  return { findings, verified: [...new Set(verified)], externalCalls, retrieval };
+  return {
+    findings,
+    verified: [...new Set(verified)],
+    discarded,
+    externalCalls,
+    retrieval,
+  };
 }

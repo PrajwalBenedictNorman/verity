@@ -1,0 +1,98 @@
+{
+  "cases": [
+    {
+      "file": "01-clean.txt",
+      "title": "Clean copy",
+      "expected": {
+        "fastMustInclude": [],
+        "fastMustExclude": ["GL-2.1", "GL-2.3", "GL-2.4", "GL-3.1"],
+        "fastMin": 0,
+        "fastMax": 0
+      }
+    },
+    {
+      "file": "02-terminology.txt",
+      "title": "Terminology mistakes",
+      "expected": {
+        "fastMustInclude": ["GL-2.1", "GL-2.3", "GL-2.4"],
+        "fastMustExclude": [],
+        "fastMin": 3
+      }
+    },
+    {
+      "file": "03-voice.txt",
+      "title": "Voice emphasis",
+      "expected": {
+        "fastMustInclude": ["GL-3.1"],
+        "fastMustExclude": [],
+        "fastMin": 2
+      }
+    },
+    {
+      "file": "04-claims.txt",
+      "title": "Claim contradictions",
+      "expected": {
+        "fastMustInclude": ["GL-2.3"],
+        "fastMustExclude": [],
+        "fastMin": 1,
+        "deepMustInclude": ["AC-1"]
+      }
+    },
+    {
+      "file": "05-spelling.txt",
+      "title": "Near-miss terminology",
+      "expected": {
+        "fastMustInclude": ["GL-2.1"],
+        "fastMustExclude": [],
+        "fastMin": 1
+      }
+    },
+    {
+      "file": "06-mixed.txt",
+      "title": "Mixed fast issues",
+      "expected": {
+        "fastMustInclude": ["GL-2.1", "GL-2.3", "GL-2.4", "GL-3.1"],
+        "fastMustExclude": [],
+        "fastMin": 4
+      }
+    },
+    {
+      "file": "07-short.txt",
+      "title": "Short clean copy",
+      "expected": {
+        "fastMustInclude": [],
+        "fastMustExclude": ["GL-2.1", "GL-2.3", "GL-2.4", "GL-3.1"],
+        "fastMin": 0,
+        "fastMax": 0
+      }
+    },
+    {
+      "file": "08-sample.docx",
+      "title": "DOCX terminology and voice",
+      "expected": {
+        "fastMustInclude": ["GL-2.4", "GL-3.1"],
+        "fastMustExclude": [],
+        "fastMin": 2
+      }
+    },
+    {
+      "file": "09-clean.docx",
+      "title": "Clean DOCX",
+      "expected": {
+        "fastMustInclude": [],
+        "fastMustExclude": ["GL-2.1", "GL-2.3", "GL-2.4", "GL-3.1"],
+        "fastMin": 0,
+        "fastMax": 0
+      }
+    },
+    {
+      "file": "10-sample.pdf",
+      "title": "PDF terminology and voice",
+      "expected": {
+        "fastMustInclude": ["GL-2.4", "GL-3.1"],
+        "fastMustExclude": [],
+        "fastMin": 2
+      }
+    }
+  ]
+}

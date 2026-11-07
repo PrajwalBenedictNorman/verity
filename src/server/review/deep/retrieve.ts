@@ -109,7 +109,12 @@ async function vectorGuidelines(brandId: string, vector: number[], k: number) {
 export async function retrieveForSentence(
   brandId: string,
   sentence: string,
-): Promise<{ claims: Retrieved[]; guidelines: Retrieved[]; mode: RetrievalMode }> {
+): Promise<{
+  claims: Retrieved[];
+  guidelines: Retrieved[];
+  mode: RetrievalMode;
+  externalCalls: number;
+}> {
   if (embeddingsConfigured()) {
     try {
       const adapter = createOpenAiCompatibleAdapter();
@@ -121,8 +126,14 @@ export async function retrieveForSentence(
           vectorGuidelines(brandId, vector, 3),
         ]);
         if (claims.length + guidelines.length > 0) {
-          return { claims, guidelines, mode: "vector" };
+          return { claims, guidelines, mode: "vector", externalCalls: 1 };
         }
+        return {
+          claims: await keywordClaims(brandId, sentence, 3),
+          guidelines: await keywordGuidelines(brandId, sentence, 3),
+          mode: "keyword",
+          externalCalls: 1,
+        };
       }
     } catch (err) {
       console.error("vector retrieval failed", err);
@@ -132,5 +143,5 @@ export async function retrieveForSentence(
     keywordClaims(brandId, sentence, 3),
     keywordGuidelines(brandId, sentence, 3),
   ]);
-  return { claims, guidelines, mode: "keyword" };
+  return { claims, guidelines, mode: "keyword", externalCalls: 0 };
 }

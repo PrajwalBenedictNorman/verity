@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { DEFAULT_BRAND_ID } from "@/lib/brand";
 import { jsonError, jsonOk, toErrorResponse } from "@/lib/errors";
 import { forbidUnless, requireApiUser } from "@/server/auth/api";
 import { getDb } from "@/server/db/client";
@@ -30,7 +31,12 @@ export async function PATCH(
     const [row] = await getDb()
       .update(glossaryTerms)
       .set(body)
-      .where(eq(glossaryTerms.id, id))
+      .where(
+        and(
+          eq(glossaryTerms.id, id),
+          eq(glossaryTerms.brandId, DEFAULT_BRAND_ID),
+        ),
+      )
       .returning();
     if (!row) return jsonError("not_found", "Term not found", 404);
     return jsonOk(row);
@@ -48,6 +54,13 @@ export async function DELETE(
   const denied = forbidUnless(user, "brand.edit");
   if (denied) return denied;
   const { id } = await ctx.params;
-  await getDb().delete(glossaryTerms).where(eq(glossaryTerms.id, id));
+  await getDb()
+    .delete(glossaryTerms)
+    .where(
+      and(
+        eq(glossaryTerms.id, id),
+        eq(glossaryTerms.brandId, DEFAULT_BRAND_ID),
+      ),
+    );
   return jsonOk({ id });
 }

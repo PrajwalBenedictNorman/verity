@@ -9,6 +9,13 @@ function labelFor(finding: Finding) {
   return "Check this";
 }
 
+function categoryFor(finding: Finding) {
+  if (finding.source.type === "claim") return "Approved claim";
+  if (finding.kind === "Terminology") return "Terminology";
+  if (finding.kind === "Voice" || finding.kind === "Tone") return "Voice";
+  return "Claims";
+}
+
 export function FindingCard({
   finding,
   selected,
@@ -32,7 +39,14 @@ export function FindingCard({
     <article
       id={`finding-${finding.id}`}
       className={`rounded-xl border p-4 ${selected ? "border-brand" : "border-line"} bg-panel`}
-      onClick={onSelect}
+      onClick={() => {
+        onSelect();
+        requestAnimationFrame(() => {
+          const mark = document.getElementById(`mark-${finding.id}`);
+          const block = document.getElementById(`block-${finding.blockId}`);
+          (mark ?? block)?.scrollIntoView({ block: "nearest" });
+        });
+      }}
     >
       <div className="flex items-center justify-between gap-2 text-sm">
         <p className="font-medium">
@@ -45,7 +59,7 @@ export function FindingCard({
       <p className="mt-2 text-sm">{finding.message}</p>
       <blockquote className="mt-3 rounded-md border border-line bg-background p-2 text-sm">
         <p className="font-medium">
-          {finding.source.code} {finding.source.type}
+          {finding.source.code} {categoryFor(finding)}:
         </p>
         <p className="mt-1 text-muted">{finding.source.snapshot}</p>
       </blockquote>
