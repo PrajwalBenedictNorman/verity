@@ -1,4 +1,5 @@
 import mammoth from "mammoth";
+import sharp from "sharp";
 import { saveStoredFile } from "@/server/storage";
 import { cleanBlockText } from "./clean";
 import type { Block, ImageRef, NormalizedDocument } from "./types";
@@ -76,12 +77,21 @@ export async function parseDocx(
           `ingest/${crypto.randomUUID()}.${ext}`,
           data,
         );
+        let width = 0;
+        let height = 0;
+        try {
+          const metadata = await sharp(data).metadata();
+          width = metadata.width ?? 0;
+          height = metadata.height ?? 0;
+        } catch {
+          // Dimensions are optional; keep the image even if metadata fails.
+        }
         images.push({
           id,
           storagePath,
           mime: image.contentType,
-          width: 0,
-          height: 0,
+          width,
+          height,
         });
         return { src: storagePath };
       }),

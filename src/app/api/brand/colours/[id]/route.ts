@@ -1,5 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { DEFAULT_BRAND_ID } from "@/lib/brand";
 import { jsonError, jsonOk, toErrorResponse } from "@/lib/errors";
 import { forbidUnless, requireApiUser } from "@/server/auth/api";
 import { getDb } from "@/server/db/client";
@@ -27,7 +28,12 @@ export async function PATCH(
     const [row] = await getDb()
       .update(brandColours)
       .set(body)
-      .where(eq(brandColours.id, id))
+      .where(
+        and(
+          eq(brandColours.id, id),
+          eq(brandColours.brandId, DEFAULT_BRAND_ID),
+        ),
+      )
       .returning();
     if (!row) return jsonError("not_found", "Colour not found", 404);
     return jsonOk(row);
@@ -45,6 +51,13 @@ export async function DELETE(
   const denied = forbidUnless(user, "brand.edit");
   if (denied) return denied;
   const { id } = await ctx.params;
-  await getDb().delete(brandColours).where(eq(brandColours.id, id));
+  await getDb()
+    .delete(brandColours)
+    .where(
+      and(
+        eq(brandColours.id, id),
+        eq(brandColours.brandId, DEFAULT_BRAND_ID),
+      ),
+    );
   return jsonOk({ id });
 }

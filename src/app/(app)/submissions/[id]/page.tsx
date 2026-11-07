@@ -34,11 +34,21 @@ export default async function SubmissionPage({
   const reviewFindings = review
     ? (await db.select().from(findings).where(eq(findings.reviewId, review.id))).map(rowToFinding)
     : [];
-  await db
-    .select()
+  const activity = await db
+    .select({
+      id: activityLog.id,
+      action: activityLog.action,
+      detail: activityLog.detail,
+      createdAt: activityLog.createdAt,
+      actorName: users.name,
+    })
     .from(activityLog)
+    .leftJoin(users, eq(users.id, activityLog.actorId))
     .where(eq(activityLog.submissionId, row.id))
     .orderBy(asc(activityLog.createdAt));
+  const approvedBy = [...activity]
+    .reverse()
+    .find((entry) => entry.action === "approve")?.actorName;
 
   return (
     <ReviewScreen
@@ -54,6 +64,8 @@ export default async function SubmissionPage({
           normalized: row.normalized,
         },
         creatorName: creator?.name ?? "Unknown",
+        approvedBy: approvedBy ?? null,
+        activity,
         latestReview: review
           ? {
               id: review.id,

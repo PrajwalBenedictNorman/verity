@@ -2,6 +2,7 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import {
   activityLog,
+  approvedClaims,
   findings,
   guidelineSections,
   reviews,
@@ -13,6 +14,7 @@ import { runFastTier } from "./fast/rules";
 import { analyseTone } from "./deep/tone";
 import { verifyClaims } from "./deep/claims";
 import { PROMPT_VERSION } from "./deep/prompts";
+import { buildAllowedSourceCodes } from "./deep/sources";
 import { findingToInsert, rowToFinding } from "./map";
 import { scoreFindings } from "./scoring";
 import { filterFindings } from "./validate";
@@ -90,7 +92,9 @@ export async function startReview(
     log: [
       `Fast tier ran: ${fast.findings.length} rule findings, 0 external calls.`,
       ...(aiOn
-        ? ["Deep checks running. Excerpts of the submitted text will be sent to the configured provider."]
+        ? [
+            "Deep checks running. Excerpts of the submitted text will be sent to the configured provider.",
+          ]
         : ["Deep checks off: external AI disabled"]),
       ...fast.log,
     ],
@@ -123,7 +127,11 @@ export async function startReview(
 
 export async function runDeep(reviewId: string) {
   const db = getDb();
-  const [review] = await db.select().from(reviews).where(eq(reviews.id, reviewId)).limit(1);
+  const [review] = await db
+    .select()
+    .from(reviews)
+    .where(eq(reviews.id, reviewId))
+    .limit(1);
   if (!review) return;
   const [submission] = await db
     .select()
@@ -133,18 +141,31 @@ export async function runDeep(reviewId: string) {
   if (!submission) return;
   const doc = submission.normalized as NormalizedDocument;
   const started = Date.now();
-  const disclosure = { ...review.disclosure };
+  let disclosure: Disclosure = { ...review.disclosure };
+  const log = [...(disclosure.log ?? [])];
+  let totalDiscarded = review.discardedCount ?? 0;
 
   try {
     const adapter = createOpenAiCompatibleAdapter();
-    const sections = await db
-      .select()
-      .from(guidelineSections)
-      .where(eq(guidelineSections.brandId, submission.brandId));
+    const [sections, claimRows] = await Promise.all([
+      db
+        .select()
+        .from(guidelineSections)
+        .where(eq(guidelineSections.brandId, submission.brandId)),
+      db
+        .select()
+        .from(approvedClaims)
+        .where(eq(approvedClaims.brandId, submission.brandId)),
+    ]);
     const claimsPolicy = sections.find((s) => s.code === "GL-4.2") ?? null;
     const voiceSections = sections
       .filter((s) => s.category === "Voice")
       .map((s) => ({ code: s.code, body: s.body }));
+    const allowedCodes = buildAllowedSourceCodes({
+      sections,
+      claims: claimRows,
+    });
+    const blockText = new Map(doc.blocks.map((b) => [b.id, b.text]));
 
     const claims = await verifyClaims({
       brandId: submission.brandId,
@@ -154,67 +175,134 @@ export async function runDeep(reviewId: string) {
         ? { code: claimsPolicy.code, body: claimsPolicy.body }
         : null,
     });
-    const tone = await analyseTone({ doc, voiceSections, adapter });
-
-    const existing = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
-    const codes = new Set(sections.map((s) => s.code));
-    for (const c of claims.verified) codes.add(c);
-    const filtered = filterFindings([...claims.findings, ...tone.findings], {
-      codes,
-      blockText: new Map(doc.blocks.map((b) => [b.id, b.text])),
-    });
-    if (filtered.kept.length) {
-      await db.insert(findings).values(filtered.kept.map((f) => findingToInsert(reviewId, f)));
+    totalDiscarded += claims.discarded;
+    if (claims.discarded > 0) {
+      log.push(
+        `${claims.discarded} claim finding(s) dropped: the cited source was not in the retrieved claims`,
+      );
     }
-    const allRows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
+    const claimsFiltered = filterFindings(claims.findings, {
+      codes: allowedCodes,
+      blockText,
+    });
+    totalDiscarded += claimsFiltered.discarded;
+    log.push(...claimsFiltered.log);
+    if (claimsFiltered.kept.length) {
+      await db
+        .insert(findings)
+        .values(
+          claimsFiltered.kept.map((f) => findingToInsert(reviewId, f)),
+        );
+    }
+
+    const afterClaimsRows = await db
+      .select()
+      .from(findings)
+      .where(eq(findings.reviewId, reviewId));
+    const afterClaims = afterClaimsRows.map(rowToFinding);
+    disclosure = {
+      ...disclosure,
+      dropped: totalDiscarded,
+      verifiedClaims: claims.verified,
+      deep: {
+        ...disclosure.deep,
+        status: "running",
+        provider: "openai-compatible",
+        chatModel: process.env.AI_MODEL ?? null,
+        embeddingModel: process.env.EMBEDDING_MODEL ?? null,
+        externalCalls: claims.externalCalls,
+        sentToExternal: "sentence-level excerpts only",
+        retrieval: claims.retrieval,
+      },
+      log,
+    };
+    await db
+      .update(reviews)
+      .set({
+        deepMs: Date.now() - started,
+        deepStatus: "running",
+        score: scoreFindings(afterClaims),
+        discardedCount: totalDiscarded,
+        verifiedClaimCodes: claims.verified,
+        disclosure,
+      })
+      .where(eq(reviews.id, reviewId));
+
+    const tone = await analyseTone({ doc, voiceSections, adapter });
+    totalDiscarded += tone.discarded;
+    if (tone.discarded > 0) {
+      log.push(
+        `${tone.discarded} tone finding(s) dropped: quoted text was not found`,
+      );
+    }
+    const toneFiltered = filterFindings(tone.findings, {
+      codes: allowedCodes,
+      blockText,
+    });
+    totalDiscarded += toneFiltered.discarded;
+    log.push(...toneFiltered.log);
+    if (toneFiltered.kept.length) {
+      await db
+        .insert(findings)
+        .values(toneFiltered.kept.map((f) => findingToInsert(reviewId, f)));
+    }
+
+    const allRows = await db
+      .select()
+      .from(findings)
+      .where(eq(findings.reviewId, reviewId));
     const allFindings: Finding[] = allRows.map(rowToFinding);
-    const dropped = filtered.discarded + tone.discarded + (review.discardedCount ?? 0);
-    const score = scoreFindings(allFindings);
-    const log = [
-      ...(disclosure.log ?? []),
+    const externalCalls = claims.externalCalls + tone.externalCalls;
+    log.push(
       `Deep tier ran with openai-compatible/${process.env.AI_MODEL}. Excerpts of your text were sent to it.`,
-      ...filtered.log,
-    ];
+    );
+    disclosure = {
+      ...disclosure,
+      dropped: totalDiscarded,
+      verifiedClaims: claims.verified,
+      deep: {
+        status: "done",
+        provider: "openai-compatible",
+        chatModel: process.env.AI_MODEL ?? null,
+        embeddingModel: process.env.EMBEDDING_MODEL ?? null,
+        externalCalls,
+        sentToExternal: "sentence-level excerpts only",
+        retrieval: claims.retrieval,
+      },
+      log,
+    };
     await db
       .update(reviews)
       .set({
         deepMs: Date.now() - started,
         deepStatus: "done",
-        score,
-        discardedCount: dropped,
+        score: scoreFindings(allFindings),
+        discardedCount: totalDiscarded,
         verifiedClaimCodes: claims.verified,
         finishedAt: new Date(),
-        disclosure: {
-          ...disclosure,
-          dropped,
-          verifiedClaims: claims.verified,
-          deep: {
-            status: "done",
-            provider: "openai-compatible",
-            chatModel: process.env.AI_MODEL ?? null,
-            embeddingModel: process.env.EMBEDDING_MODEL ?? null,
-            externalCalls: claims.externalCalls + tone.externalCalls,
-            sentToExternal: "sentence-level excerpts only",
-            retrieval: claims.retrieval,
-          },
-          log,
-        },
+        disclosure,
       })
       .where(eq(reviews.id, reviewId));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Deep tier failed";
-    const existing = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
+    const existingRows = await db
+      .select()
+      .from(findings)
+      .where(eq(findings.reviewId, reviewId));
+    log.push(`Deep tier failed: ${message}`);
     await db
       .update(reviews)
       .set({
         deepMs: Date.now() - started,
         deepStatus: "failed",
-        score: scoreFindings(existing.map(rowToFinding)),
+        score: scoreFindings(existingRows.map(rowToFinding)),
+        discardedCount: totalDiscarded,
         finishedAt: new Date(),
         disclosure: {
           ...disclosure,
+          dropped: totalDiscarded,
           deep: { ...disclosure.deep, status: "failed" },
-          log: [...(disclosure.log ?? []), `Deep tier failed: ${message}`],
+          log,
         },
       })
       .where(eq(reviews.id, reviewId));

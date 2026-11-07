@@ -24,7 +24,13 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
   return {
     async complete(args): Promise<AiCompleteResult> {
       const started = Date.now();
-      const body = {
+      type ChatPayload = {
+        model: string;
+        temperature: number;
+        messages: { role: string; content: string }[];
+        response_format?: { type: "json_object" };
+      };
+      const body: ChatPayload = {
         model,
         temperature: 0,
         messages: [
@@ -33,7 +39,10 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
         ],
         response_format: { type: "json_object" },
       };
-      const run = async (payload: typeof body) => {
+      const run = async (
+        payload: ChatPayload,
+        allowJsonModeFallback = true,
+      ): Promise<unknown> => {
         const res = await fetch(`${root}/chat/completions`, {
           method: "POST",
           headers: {
@@ -44,6 +53,15 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
           signal: AbortSignal.timeout(args.timeoutMs),
         });
         if (!res.ok) {
+          if (
+            res.status === 400 &&
+            allowJsonModeFallback &&
+            payload.response_format
+          ) {
+            const rest = { ...payload };
+            delete rest.response_format;
+            return run(rest, false);
+          }
           throw new Error(`AI complete failed: ${res.status}`);
         }
         const json = (await res.json()) as {
@@ -53,12 +71,7 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
         return parseJson(content);
       };
 
-      let parsed: unknown;
-      try {
-        parsed = await run(body);
-      } catch (err) {
-        throw err;
-      }
+      let parsed: unknown = await run(body);
       let checked = args.schema.safeParse(parsed);
       if (!checked.success) {
         parsed = await run({

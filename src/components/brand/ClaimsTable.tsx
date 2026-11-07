@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { apiRequest } from "@/lib/api-client";
 
 type Claim = { id: string; code: string; text: string };
 
@@ -14,19 +15,35 @@ export function ClaimsTable({
 }) {
   const router = useRouter();
   const [form, setForm] = useState({ code: "", text: "" });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function create() {
-    await fetch("/api/brand/claims", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    router.refresh();
+    setBusy(true);
+    setError(null);
+    try {
+      await apiRequest("/api/brand/claims", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setForm({ code: "", text: "" });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add claim");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
-    await fetch(`/api/brand/claims/${id}`, { method: "DELETE" });
-    router.refresh();
+    setError(null);
+    try {
+      await apiRequest(`/api/brand/claims/${id}`, { method: "DELETE" });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete claim");
+    }
   }
 
   return (
@@ -66,11 +83,16 @@ export function ClaimsTable({
             onChange={(e) => setForm({ ...form, text: e.target.value })}
             required
           />
-          <button type="submit" className="w-fit rounded-md bg-brand px-3 py-1.5 text-white">
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-fit rounded-md bg-brand px-3 py-1.5 text-white disabled:opacity-50"
+          >
             Add claim
           </button>
         </form>
       ) : null}
+      {error ? <p className="mt-2 text-sm text-error">{error}</p> : null}
     </section>
   );
 }

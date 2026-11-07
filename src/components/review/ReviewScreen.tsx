@@ -21,6 +21,14 @@ type Payload = {
     normalized: NormalizedDocument;
   };
   creatorName: string;
+  approvedBy: string | null;
+  activity: {
+    id: string;
+    action: string;
+    detail: string;
+    createdAt: string | Date;
+    actorName: string | null;
+  }[];
   latestReview: {
     id: string;
     deepStatus: string;
@@ -58,10 +66,6 @@ export function ReviewScreen({
   const [error, setError] = useState<string | null>(null);
   const deepPending = ["pending", "running"].includes(data.latestReview?.deepStatus ?? "");
   const canAct = role === "admin" || (role === "creator" && userId === data.submission.creatorId);
-
-  useEffect(() => {
-    setData(initial);
-  }, [initial]);
 
   useEffect(() => {
     const reviewId = data.latestReview?.id;
@@ -153,6 +157,7 @@ export function ReviewScreen({
           status={data.submission.status}
           role={role}
           canSubmit={canSubmit}
+          reviewerName={data.approvedBy ?? undefined}
           onSubmit={async () => {
             await api(`/api/submissions/${data.submission.id}/transition`, {
               method: "POST",
@@ -185,6 +190,12 @@ export function ReviewScreen({
           Deep checks off: external AI disabled
         </p>
       ) : null}
+      {data.latestReview?.deepStatus === "failed" ? (
+        <p className="mb-4 rounded-md border border-error bg-panel px-3 py-2 text-sm text-error">
+          Deep checks failed. Fast results are still shown and the score is
+          partial.
+        </p>
+      ) : null}
       {error ? <p className="mb-3 text-sm text-error">{error}</p> : null}
       <div className="mb-3 flex gap-2">
         {data.submission.sourceKind === "text" && canAct ? (
@@ -206,7 +217,7 @@ export function ReviewScreen({
           </button>
         ) : null}
       </div>
-      <div className="grid gap-6 lg:grid-cols-[55%_1fr] max-[860px]:grid-cols-1">
+      <div className="grid gap-6 min-[860px]:grid-cols-[55%_1fr]">
         <section className="rounded-xl border border-line bg-panel p-5">
           {editing ? (
             <textarea
@@ -256,6 +267,7 @@ export function ReviewScreen({
       <ReviewLog
         disclosure={data.latestReview?.disclosure ?? null}
         log={data.latestReview?.disclosure.log ?? []}
+        activity={data.activity}
       />
     </div>
   );

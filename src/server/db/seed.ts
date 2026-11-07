@@ -12,6 +12,7 @@ import {
   users,
 } from "./schema";
 import brand from "./seed-data/brand.json";
+import { embedBrand } from "@/server/ai/embeddings";
 import type { NormalizedDocument } from "@/server/ingest/types";
 
 const USER_IDS = {
@@ -178,6 +179,8 @@ async function seed() {
       })),
     );
   }
+
+  await embedBrand(brand.id);
 
   const [existingDemo] = await db
     .select()

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { apiRequest } from "@/lib/api-client";
 
 type Section = {
   id: string;
@@ -25,19 +26,35 @@ export function SectionsList({
     title: "",
     body: "",
   });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function create() {
-    await fetch("/api/brand/sections", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    router.refresh();
+    setBusy(true);
+    setError(null);
+    try {
+      await apiRequest("/api/brand/sections", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setForm({ ...form, code: "", title: "", body: "" });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add section");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function remove(id: string) {
-    await fetch(`/api/brand/sections/${id}`, { method: "DELETE" });
-    router.refresh();
+    setError(null);
+    try {
+      await apiRequest(`/api/brand/sections/${id}`, { method: "DELETE" });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete section");
+    }
   }
 
   return (
@@ -94,11 +111,16 @@ export function SectionsList({
             onChange={(e) => setForm({ ...form, body: e.target.value })}
             required
           />
-          <button type="submit" className="w-fit rounded-md bg-brand px-3 py-1.5 text-white">
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-fit rounded-md bg-brand px-3 py-1.5 text-white disabled:opacity-50"
+          >
             Add section
           </button>
         </form>
       ) : null}
+      {error ? <p className="mt-2 text-sm text-error">{error}</p> : null}
     </section>
   );
 }

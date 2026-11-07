@@ -4,6 +4,7 @@ import type { AiAdapter } from "@/server/ai/adapter";
 import type { NormalizedDocument } from "@/server/ingest/types";
 import type { Finding } from "../types";
 import { TONE_SYSTEM } from "./prompts";
+import { withRetries } from "./retry";
 
 export const toneSchema = z.object({
   issues: z.array(
@@ -48,15 +49,17 @@ export async function analyseTone(args: {
   let discarded = 0;
   let externalCalls = 0;
   for (const chunk of chunkText(args.doc)) {
-    const result = await args.adapter.complete({
-      system: TONE_SYSTEM,
-      user: JSON.stringify({
-        voice_sections: args.voiceSections,
-        blocks: chunk.text,
+    const result = await withRetries(() =>
+      args.adapter.complete({
+        system: TONE_SYSTEM,
+        user: JSON.stringify({
+          voice_sections: args.voiceSections,
+          blocks: chunk.text,
+        }),
+        schema: toneSchema,
+        timeoutMs: AI_TIMEOUT_MS,
       }),
-      schema: toneSchema,
-      timeoutMs: AI_TIMEOUT_MS,
-    });
+    );
     externalCalls += 1;
     const data = toneSchema.parse(result.data);
     for (const issue of data.issues) {

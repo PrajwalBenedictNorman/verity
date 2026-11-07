@@ -10,10 +10,13 @@ export type ApiUser = {
   role: Role;
 };
 
-export async function requireApiUser() {
+export async function requireApiUser(): Promise<
+  | { user: ApiUser; error: null }
+  | { user: null; error: Response }
+> {
   const session = await auth();
   if (!session?.user) {
-    return { user: null as ApiUser | null, error: jsonError("unauthenticated", "Sign in required", 401) };
+    return { user: null, error: jsonError("unauthenticated", "Sign in required", 401) };
   }
   return { user: session.user, error: null };
 }
