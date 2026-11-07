@@ -73,9 +73,12 @@ EMBEDDING_DIM=1536
 | `pnpm lint` | Run ESLint |
 | `pnpm typecheck` | Run TypeScript without emitting |
 | `pnpm test` | Run the Vitest suite |
+| `pnpm format` | Format codebase with Prettier |
 | `pnpm db:generate` | Generate Drizzle migrations |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:seed` | Seed users, brand rules, demo submission, and embeddings |
+| `pnpm db:embed` | Populate missing embeddings without re-seeding |
+| `pnpm ai:check` | Run end-to-end AI pre-flight and configuration check |
 | `pnpm eval` | Run the testset through the review pipeline |
 
 ### Evaluation
@@ -99,6 +102,8 @@ Everyone can read brand rules. Admins can add and delete guideline sections, glo
 
 ## Docs
 
+- [AI Architecture & Limits](docs/AI.md)
+- [Troubleshooting & Operations](docs/TROUBLESHOOTING.md)
 - [API](docs/API.md)
 - [Demo script](docs/DEMO_SCRIPT.md)
 - [Decisions](docs/DECISIONS.md)

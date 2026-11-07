@@ -4,6 +4,7 @@ import { forbidUnless, requireApiUser } from "@/server/auth/api";
 import { getDb } from "@/server/db/client";
 import { reviews, submissions } from "@/server/db/schema";
 import { latestReview, logActivity, runDeep } from "@/server/review/orchestrator";
+import { checkUserReviewRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ export async function POST(
     if (!row) return jsonError("not_found", "Submission not found", 404);
     const denied = forbidUnless(user, "submissions.review", row.creatorId);
     if (denied) return denied;
+    if (!checkUserReviewRateLimit(user.id)) {
+      return jsonError("rate_limited", "Too many review requests. Please wait a moment.", 429);
+    }
 
     const review = await latestReview(id);
     if (!review) return jsonError("not_found", "No existing review found to retry", 404);

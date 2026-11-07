@@ -10,6 +10,7 @@ import {
 } from "@/server/db/schema";
 import { aiConfigured, getAdapter } from "@/server/ai/adapter";
 import { AiError, userMessageFor } from "@/server/ai/errors";
+import { logger } from "@/lib/logger";
 import { runFastTier } from "./fast/rules";
 import { analyseTone } from "./deep/tone";
 import { verifyClaims } from "./deep/claims";
@@ -291,10 +292,18 @@ export async function runDeep(reviewId: string) {
       },
       log,
     };
+    const deepMs = Date.now() - started;
+    logger.with({ reviewId }).deepSummary({
+      ms: deepMs,
+      calls: ctx.calls,
+      retries: ctx.retries,
+      cacheHits: ctx.cacheHits,
+      dropped: totalDiscarded,
+    });
     await db
       .update(reviews)
       .set({
-        deepMs: Date.now() - started,
+        deepMs,
         deepStatus: "done",
         score: scoreFindings(allFindings),
         discardedCount: totalDiscarded,
@@ -308,8 +317,7 @@ export async function runDeep(reviewId: string) {
     const status = err instanceof AiError ? err.status : undefined;
     const providerBody = err instanceof AiError ? err.providerBody : undefined;
 
-    console.error("Deep tier failed", {
-      reviewId,
+    logger.with({ reviewId }).error("Deep tier failed", {
       code,
       status,
       providerBody,
