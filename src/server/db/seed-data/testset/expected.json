@@ -42,7 +42,7 @@
       "file": "05-spelling.txt",
       "title": "Near-miss terminology",
       "expected": {
-        "fastMustInclude": ["GL-2.1"],
+        "fastMustInclude": ["GL-2.3"],
         "fastMustExclude": [],
         "fastMin": 1
       }
