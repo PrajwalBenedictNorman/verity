@@ -123,6 +123,9 @@ describe("AI error handling and classification", () => {
     expect(userMessageFor("model_not_found")).toContain("AI_MODEL");
     expect(userMessageFor("auth")).toContain("AI_API_KEY");
     expect(userMessageFor("breaker_open")).toContain("checks are paused");
+    expect(userMessageFor("invalid_output")).toBe(
+      "The AI returned an answer that could not be read. Fast results are shown.",
+    );
     expect(userMessageFor("unknown")).toContain("Deep checks could not complete");
   });
 });
@@ -211,8 +214,9 @@ describe("Clean adapter and single-layer behavior", () => {
       }
       // Verify repair prompt includes the issue
       const userPrompt = body.messages[body.messages.length - 1].content;
-      expect(userPrompt).toContain("did not match the schema");
+      expect(userPrompt).toContain("ok");
       expect(userPrompt).toContain("wrong");
+      expect(userPrompt).toContain("Previous output:");
       return new Response(
         JSON.stringify({
           choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
@@ -232,6 +236,84 @@ describe("Clean adapter and single-layer behavior", () => {
     expect(fetchCount).toBe(2);
     expect(result.calls).toBe(2);
     expect(result.data).toEqual({ ok: true });
+  });
+
+  it("repair request includes formatted Zod issues and redacted previous output without leaking secrets", async () => {
+    let fetchCount = 0;
+    const strictSchema = z.object({
+      verdicts: z.array(
+        z.object({
+          index: z.number(),
+          verdict: z.string(),
+          confidence: z.number(),
+        }),
+      ),
+    });
+
+    const secretKey = "AIzaSyASecretKey12345678901234567890";
+    process.env.AI_API_KEY = secretKey;
+
+    globalThis.fetch = vi.fn().mockImplementation(async (_url, opts) => {
+      fetchCount++;
+      const body = JSON.parse(opts.body as string);
+      if (fetchCount === 1) {
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    verdicts: [
+                      {
+                        index: 0,
+                        verdict: "unsupported",
+                        // confidence is missing
+                        extra: secretKey,
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+
+      const repairPrompt = body.messages[body.messages.length - 1].content;
+      expect(repairPrompt).toContain("verdicts.0.confidence");
+      expect(repairPrompt).toContain("Previous output:");
+      expect(repairPrompt).not.toContain(secretKey);
+      expect(repairPrompt).toContain("[REDACTED");
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  verdicts: [{ index: 0, verdict: "unsupported", confidence: 0.9 }],
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+
+    const adapter = createOpenAiCompatibleAdapter();
+    const result = await adapter.complete({
+      system: "sys",
+      user: "usr",
+      schema: strictSchema,
+      timeoutMs: 5000,
+    });
+
+    expect(fetchCount).toBe(2);
+    expect(result.data).toEqual({
+      verdicts: [{ index: 0, verdict: "unsupported", confidence: 0.9 }],
+    });
   });
 
   it("adapter embed sends dimensions and falls back if 400 is returned", async () => {

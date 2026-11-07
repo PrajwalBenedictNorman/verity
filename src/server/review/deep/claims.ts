@@ -14,19 +14,17 @@ import { createDeepStats, type DeepStats } from "./stats";
 
 export const claimVerdictSchema = z.object({
   verdict: z.enum(["supported", "contradicted", "unsupported", "not_a_claim"]),
-  cited_source_code: z.string().nullable(),
-  confidence: z.number().min(0).max(1),
-  explanation: z.string().max(200),
-  suggested_rewrite: z.string().nullable(),
+  cited_source_code: z.string().nullish().transform((v) => v ?? null),
+  confidence: z.number().min(0).max(1).optional().transform((v) => v ?? 0.5),
+  explanation: z.string().transform((s) => s.slice(0, 200)),
+  suggested_rewrite: z.string().nullish().transform((v) => v ?? null),
 });
 
-export const claimBatchSchema = z.object({
-  verdicts: z.array(
-    claimVerdictSchema.extend({
-      index: z.number().int().min(0),
-    }),
-  ),
-});
+// Adapter-level schema: only checks the envelope, so one bad item cannot fail the whole call.
+export const claimBatchSchema = z.object({ verdicts: z.array(z.unknown()) });
+
+// Module-level item schema
+const claimItemSchema = claimVerdictSchema.extend({ index: z.number().int().min(0) });
 
 export type ClaimVerdict = z.infer<typeof claimVerdictSchema>;
 
@@ -257,13 +255,26 @@ export async function verifyClaims(args: {
 
     const data = claimBatchSchema.parse(result.data);
     const verdictMap = new Map<number, ClaimVerdict>();
+    let validCount = 0;
 
-    for (const v of data.verdicts) {
+    for (const raw of data.verdicts) {
+      const parsed = claimItemSchema.safeParse(raw);
+      if (!parsed.success) {
+        continue;
+      }
+      validCount += 1;
+      const v = parsed.data;
       if (v.index < 0 || v.index >= batchCandidates.length) {
         discarded += 1;
         continue;
       }
-      verdictMap.set(v.index, v);
+      if (!verdictMap.has(v.index)) {
+        verdictMap.set(v.index, v);
+      }
+    }
+
+    if (batchCandidates.length > 0 && validCount === 0) {
+      throw new AiError("invalid_output", false);
     }
 
     for (let idx = 0; idx < batchCandidates.length; idx++) {

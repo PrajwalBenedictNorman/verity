@@ -8,17 +8,17 @@ import { TONE_SYSTEM } from "./prompts";
 import { withRetries } from "./retry";
 import { createDeepStats, type DeepStats } from "./stats";
 
+export const toneIssueSchema = z.object({
+  blockId: z.string(),
+  quote: z.string(),
+  issue: z.string(),
+  cited_source_code: z.string(),
+  confidence: z.number().min(0).max(1).optional().transform((v) => v ?? 0.5),
+  suggested_rewrite: z.string().nullish().transform((v) => v ?? null),
+});
+
 export const toneSchema = z.object({
-  issues: z.array(
-    z.object({
-      blockId: z.string(),
-      quote: z.string(),
-      issue: z.string(),
-      cited_source_code: z.string(),
-      confidence: z.number().min(0).max(1),
-      suggested_rewrite: z.string().nullable(),
-    }),
-  ),
+  issues: z.array(z.unknown()),
 });
 
 function chunkText(doc: NormalizedDocument, size?: number) {
@@ -81,7 +81,13 @@ export async function analyseTone(args: {
       ctx.calls += result.calls - 1;
     }
     const data = toneSchema.parse(result.data);
-    for (const issue of data.issues) {
+    for (const raw of data.issues) {
+      const parsed = toneIssueSchema.safeParse(raw);
+      if (!parsed.success) {
+        discarded += 1;
+        continue;
+      }
+      const issue = parsed.data;
       const block = args.doc.blocks.find((b) => b.id === issue.blockId);
       if (!block) {
         discarded += 1;

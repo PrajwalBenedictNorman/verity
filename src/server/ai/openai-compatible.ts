@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { AiAdapter, AiCompleteResult, AiEmbedResult } from "./adapter";
 import { EMBEDDING_DIM } from "@/lib/config";
 import {
@@ -19,6 +20,16 @@ async function parseJson(text: string) {
   const slice =
     start >= 0 && end >= start ? trimmed.slice(start, end + 1) : trimmed;
   return JSON.parse(slice) as unknown;
+}
+
+export function formatZodIssues(error: z.ZodError, max = 10): string {
+  return error.issues
+    .slice(0, max)
+    .map((issue) => {
+      const p = issue.path.length > 0 ? issue.path.join(".") : "root";
+      return `${p}: ${issue.message}`;
+    })
+    .join("\n");
 }
 
 export function createOpenAiCompatibleAdapter(): AiAdapter {
@@ -103,16 +114,15 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
       let parsed: unknown = await send(body);
       let checked = args.schema.safeParse(parsed);
       if (!checked.success) {
-        const invalidOutputStr = redact(
-          typeof parsed === "string" ? parsed : JSON.stringify(parsed),
-        ).slice(0, 1000);
+        const formattedIssues = formatZodIssues(checked.error);
+        const previousOutput = redact(JSON.stringify(parsed)).slice(0, 2000);
         parsed = await send({
           ...body,
           messages: [
             ...body.messages,
             {
               role: "user",
-              content: `The previous response did not match the schema: ${checked.error.message}. Previous output: ${invalidOutputStr}. Return valid JSON only that strictly matches the schema. No markdown.`,
+              content: `${formattedIssues}\n\nPrevious output: ${previousOutput}\n\nReturn valid JSON only, fixing these problems. No markdown.`,
             },
           ],
         });
@@ -123,9 +133,7 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
             false,
             undefined,
             undefined,
-            redact(
-              typeof parsed === "string" ? parsed : JSON.stringify(parsed),
-            ).slice(0, 500),
+            redact(formatZodIssues(checked.error)).slice(0, 500),
           );
         }
       }

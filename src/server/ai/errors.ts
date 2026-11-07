@@ -44,6 +44,8 @@ export function userMessageFor(code: AiErrorCode | "interrupted" | string): stri
       return "The AI provider rejected the credentials. An admin should check AI_API_KEY.";
     case "breaker_open":
       return "AI checks are paused after repeated provider errors. Fast results are shown.";
+    case "invalid_output":
+      return "The AI returned an answer that could not be read. Fast results are shown.";
     default:
       return "Deep checks could not complete. Fast results are shown.";
   }

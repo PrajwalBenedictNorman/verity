@@ -1,4 +1,4 @@
-export const PROMPT_VERSION = "verity-deep-v2";
+export const PROMPT_VERSION = "verity-deep-v3";
 
 export const CLAIM_VERDICT_SYSTEM = `You verify marketing sentences against a brand's approved claims.
 You are given a list of items. Each item has: (1) index, (2) sentence, (3) approved_claims with IDs, (4) guideline_sections with IDs.
@@ -13,7 +13,15 @@ Rules for each verdict:
 - NEVER invent an ID. NEVER use outside knowledge to decide a claim is true.
 - Keep explanation under 200 characters, plain language, no blame.
 - Only propose a rewrite that stays within the wording of an approved claim.
-Return JSON only, matching the schema.`;
+Return JSON only, in exactly this shape:
+{"verdicts":[{"index":0,"verdict":"supported|contradicted|unsupported|not_a_claim","cited_source_code":"<id or null>","confidence":0.0,"explanation":"<max 200 chars>","suggested_rewrite":"<text or null>"}]}
+Rules:
+- Return exactly one verdict per input item, keyed by its index.
+- Every item MUST contain all six keys. Use null where a value does not apply.
+- Never omit confidence. It is a number from 0 to 1.
+- Do not add markdown or text outside the JSON.
+Example:
+{"verdicts":[{"index":0,"verdict":"unsupported","cited_source_code":null,"confidence":0.8,"explanation":"No approved claim covers this statement.","suggested_rewrite":null}]}`;
 
 export const TONE_SYSTEM = `You check marketing copy against Voice guideline sections only.
 You are given the Voice sections with IDs and the document blocks with IDs.
