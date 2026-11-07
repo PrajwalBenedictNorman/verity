@@ -11,6 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx src/server/db/seed.ts",
     "db:embed": "tsx --env-file=.env scripts/embed.ts",
+    "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "eval": "tsx scripts/eval.ts"
