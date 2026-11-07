@@ -1,16 +1,19 @@
 import type { z } from "zod";
+export { getAdapter } from "./openai-compatible";
 
 export type AiCompleteResult = {
   data: unknown;
   provider: string;
   model: string;
   ms: number;
+  calls: number;
 };
 
 export type AiEmbedResult = {
   vectors: number[][];
   provider: string;
   model: string;
+  calls: number;
 };
 
 export interface AiAdapter {

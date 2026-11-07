@@ -2,8 +2,7 @@ import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { RETRIEVAL_MIN_SIM } from "@/lib/config";
 import { getDb } from "@/server/db/client";
 import { approvedClaims, guidelineSections } from "@/server/db/schema";
-import { embeddingsConfigured } from "@/server/ai/adapter";
-import { createOpenAiCompatibleAdapter } from "@/server/ai/openai-compatible";
+import { embeddingsConfigured, getAdapter } from "@/server/ai/adapter";
 
 export type Retrieved = {
   code: string;
@@ -117,7 +116,7 @@ export async function retrieveForSentence(
 }> {
   if (embeddingsConfigured()) {
     try {
-      const adapter = createOpenAiCompatibleAdapter();
+      const adapter = getAdapter();
       const { vectors } = await adapter.embed([sentence]);
       const vector = vectors[0];
       if (vector) {

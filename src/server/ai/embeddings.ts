@@ -1,12 +1,11 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/server/db/client";
 import { approvedClaims, guidelineSections } from "@/server/db/schema";
-import { aiConfigured, embeddingsConfigured } from "./adapter";
-import { createOpenAiCompatibleAdapter } from "./openai-compatible";
+import { aiConfigured, embeddingsConfigured, getAdapter } from "./adapter";
 
 export async function embedTexts(texts: string[]) {
   if (!embeddingsConfigured()) return null;
-  const adapter = createOpenAiCompatibleAdapter();
+  const adapter = getAdapter();
   try {
     return await adapter.embed(texts);
   } catch (err) {

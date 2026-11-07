@@ -8,8 +8,7 @@ import {
   reviews,
   submissions,
 } from "@/server/db/schema";
-import { aiConfigured } from "@/server/ai/adapter";
-import { createOpenAiCompatibleAdapter } from "@/server/ai/openai-compatible";
+import { aiConfigured, getAdapter } from "@/server/ai/adapter";
 import { runFastTier } from "./fast/rules";
 import { analyseTone } from "./deep/tone";
 import { verifyClaims } from "./deep/claims";
@@ -146,7 +145,7 @@ export async function runDeep(reviewId: string) {
   let totalDiscarded = review.discardedCount ?? 0;
 
   try {
-    const adapter = createOpenAiCompatibleAdapter();
+    const adapter = getAdapter();
     const [sections, claimRows] = await Promise.all([
       db
         .select()
