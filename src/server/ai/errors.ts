@@ -24,7 +24,10 @@ export class AiError extends Error {
   }
 }
 
-export function userMessageFor(code: AiErrorCode): string {
+export function userMessageFor(code: AiErrorCode | "interrupted" | string): string {
+  if (code === "interrupted") {
+    return "Deep checks were interrupted. Fast results are shown.";
+  }
   switch (code) {
     case "quota_exceeded":
       return "The AI provider's usage quota is used up. Fast results are shown. Try again later or use another model or key.";

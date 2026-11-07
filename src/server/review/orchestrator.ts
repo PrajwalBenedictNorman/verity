@@ -9,11 +9,13 @@ import {
   submissions,
 } from "@/server/db/schema";
 import { aiConfigured, getAdapter } from "@/server/ai/adapter";
+import { AiError, userMessageFor } from "@/server/ai/errors";
 import { runFastTier } from "./fast/rules";
 import { analyseTone } from "./deep/tone";
 import { verifyClaims } from "./deep/claims";
 import { PROMPT_VERSION } from "./deep/prompts";
 import { buildAllowedSourceCodes } from "./deep/sources";
+import { createDeepStats, type DeepStats } from "./deep/stats";
 import { findingToInsert, rowToFinding } from "./map";
 import { scoreFindings } from "./scoring";
 import { filterFindings } from "./validate";
@@ -140,6 +142,11 @@ export async function runDeep(reviewId: string) {
   if (!submission) return;
   const doc = submission.normalized as NormalizedDocument;
   const started = Date.now();
+  const deadline = started + Number(process.env.AI_DEEP_BUDGET_MS ?? 120_000);
+  const ctx: DeepStats = createDeepStats();
+  let retrieval: "vector" | "keyword" | "none" = "none";
+  let claimsFinished = false;
+
   let disclosure: Disclosure = { ...review.disclosure };
   const log = [...(disclosure.log ?? [])];
   let totalDiscarded = review.discardedCount ?? 0;
@@ -173,7 +180,12 @@ export async function runDeep(reviewId: string) {
       claimsPolicy: claimsPolicy
         ? { code: claimsPolicy.code, body: claimsPolicy.body }
         : null,
+      ctx,
+      deadline,
+      log,
     });
+    retrieval = claims.retrieval;
+    claimsFinished = true;
     totalDiscarded += claims.discarded;
     if (claims.discarded > 0) {
       log.push(
@@ -209,9 +221,11 @@ export async function runDeep(reviewId: string) {
         provider: "openai-compatible",
         chatModel: process.env.AI_MODEL ?? null,
         embeddingModel: process.env.EMBEDDING_MODEL ?? null,
-        externalCalls: claims.externalCalls,
+        externalCalls: ctx.calls,
+        retries: ctx.retries,
+        cacheHits: ctx.cacheHits,
         sentToExternal: "sentence-level excerpts only",
-        retrieval: claims.retrieval,
+        retrieval,
       },
       log,
     };
@@ -227,7 +241,13 @@ export async function runDeep(reviewId: string) {
       })
       .where(eq(reviews.id, reviewId));
 
-    const tone = await analyseTone({ doc, voiceSections, adapter });
+    const tone = await analyseTone({
+      doc,
+      voiceSections,
+      adapter,
+      ctx,
+      deadline,
+    });
     totalDiscarded += tone.discarded;
     if (tone.discarded > 0) {
       log.push(
@@ -251,7 +271,6 @@ export async function runDeep(reviewId: string) {
       .from(findings)
       .where(eq(findings.reviewId, reviewId));
     const allFindings: Finding[] = allRows.map(rowToFinding);
-    const externalCalls = claims.externalCalls + tone.externalCalls;
     log.push(
       `Deep tier ran with openai-compatible/${process.env.AI_MODEL}. Excerpts of your text were sent to it.`,
     );
@@ -264,9 +283,11 @@ export async function runDeep(reviewId: string) {
         provider: "openai-compatible",
         chatModel: process.env.AI_MODEL ?? null,
         embeddingModel: process.env.EMBEDDING_MODEL ?? null,
-        externalCalls,
+        externalCalls: ctx.calls,
+        retries: ctx.retries,
+        cacheHits: ctx.cacheHits,
         sentToExternal: "sentence-level excerpts only",
-        retrieval: claims.retrieval,
+        retrieval,
       },
       log,
     };
@@ -283,28 +304,61 @@ export async function runDeep(reviewId: string) {
       })
       .where(eq(reviews.id, reviewId));
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Deep tier failed";
+    const code = err instanceof AiError ? err.code : "unknown";
+    const status = err instanceof AiError ? err.status : undefined;
+    const providerBody = err instanceof AiError ? err.providerBody : undefined;
+
+    console.error("Deep tier failed", {
+      reviewId,
+      code,
+      status,
+      providerBody,
+    });
+
+    const safeMessage = userMessageFor(code);
+    log.push(safeMessage);
+
     const existingRows = await db
       .select()
       .from(findings)
       .where(eq(findings.reviewId, reviewId));
-    log.push(`Deep tier failed: ${message}`);
+    const allFindings = existingRows.map(rowToFinding);
+
+    disclosure = {
+      ...disclosure,
+      dropped: totalDiscarded,
+      deep: {
+        ...disclosure.deep,
+        status: "failed",
+        errorCode: code,
+        errorMessage: safeMessage,
+        externalCalls: ctx.calls,
+        retries: ctx.retries,
+        cacheHits: ctx.cacheHits,
+        retrieval,
+        partial: claimsFinished,
+      },
+      log,
+    };
+
     await db
       .update(reviews)
       .set({
         deepMs: Date.now() - started,
         deepStatus: "failed",
-        score: scoreFindings(existingRows.map(rowToFinding)),
+        score: scoreFindings(allFindings),
         discardedCount: totalDiscarded,
         finishedAt: new Date(),
-        disclosure: {
-          ...disclosure,
-          dropped: totalDiscarded,
-          deep: { ...disclosure.deep, status: "failed" },
-          log,
-        },
+        disclosure,
       })
       .where(eq(reviews.id, reviewId));
+
+    await logActivity(
+      submission.id,
+      null,
+      "deep_failed",
+      safeMessage,
+    );
   }
 }
 
@@ -316,7 +370,42 @@ export async function latestReview(submissionId: string) {
     .where(eq(reviews.submissionId, submissionId))
     .orderBy(desc(reviews.startedAt))
     .limit(1);
-  return review ?? null;
+  if (!review) return null;
+
+  if (review.deepStatus === "pending" || review.deepStatus === "running") {
+    const staleMs = Number(process.env.AI_DEEP_STALE_MS ?? 300_000);
+    const age = Date.now() - new Date(review.startedAt).getTime();
+    if (age > staleMs) {
+      const msg = "Deep checks were interrupted. Fast results are shown.";
+      const updatedDisclosure: Disclosure = {
+        ...review.disclosure,
+        deep: {
+          ...review.disclosure.deep,
+          status: "failed",
+          errorCode: "interrupted",
+          errorMessage: msg,
+        },
+        log: [...(review.disclosure.log ?? []), msg],
+      };
+      await db
+        .update(reviews)
+        .set({
+          deepStatus: "failed",
+          finishedAt: new Date(),
+          disclosure: updatedDisclosure,
+        })
+        .where(eq(reviews.id, review.id));
+
+      await logActivity(submissionId, null, "deep_failed", msg);
+      return {
+        ...review,
+        deepStatus: "failed" as const,
+        disclosure: updatedDisclosure,
+      };
+    }
+  }
+
+  return review;
 }
 
 export async function logActivity(

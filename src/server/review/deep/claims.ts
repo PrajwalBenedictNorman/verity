@@ -170,7 +170,14 @@ export async function verifyClaims(args: {
       sentenceVectors = allVectors;
       retrieval = "vector";
     } catch (embedErr) {
-      if (embedErr instanceof AiError && embedErr.code === "timeout" && !embedErr.retryable) {
+      if (
+        embedErr instanceof AiError &&
+        (embedErr.code === "quota_exceeded" ||
+          embedErr.code === "auth" ||
+          embedErr.code === "model_not_found" ||
+          embedErr.code === "breaker_open" ||
+          (embedErr.code === "timeout" && !embedErr.retryable))
+      ) {
         throw embedErr;
       }
       args.log?.push("Embeddings unavailable: using keyword retrieval");
