@@ -6,6 +6,7 @@ import {
   classifyHttpError,
   redact,
 } from "./errors";
+import { aiGuard } from "./guard";
 
 function baseUrl() {
   return (process.env.AI_BASE_URL ?? "").replace(/\/$/, "");
@@ -52,41 +53,51 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
         allowJsonModeFallback = true,
       ): Promise<unknown> => {
         callCount++;
-        let res: Response;
-        try {
-          res = await fetch(`${root}/chat/completions`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${key}`,
-              "content-type": "application/json",
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(args.timeoutMs),
-          });
-        } catch (fetchErr) {
-          throw classifyError(fetchErr);
-        }
+        const content = await aiGuard.run("chat", async () => {
+          let res: Response;
+          try {
+            res = await fetch(`${root}/chat/completions`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${key}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(args.timeoutMs),
+            });
+          } catch (fetchErr) {
+            throw classifyError(fetchErr);
+          }
 
-        if (res.ok) {
-          const json = (await res.json()) as {
-            choices?: { message?: { content?: string } }[];
-          };
-          const content = json.choices?.[0]?.message?.content ?? "";
-          return parseJson(content);
-        }
+          if (res.ok) {
+            const json = (await res.json()) as {
+              choices?: { message?: { content?: string } }[];
+            };
+            return {
+              ok: true as const,
+              content: json.choices?.[0]?.message?.content ?? "",
+            };
+          }
 
-        const text = await res.text().catch(() => "");
-        if (
-          res.status === 400 &&
-          allowJsonModeFallback &&
-          payload.response_format
-        ) {
+          const text = await res.text().catch(() => "");
+          if (
+            res.status === 400 &&
+            allowJsonModeFallback &&
+            payload.response_format
+          ) {
+            return { ok: false as const, status: 400, fallback: true as const };
+          }
+
+          throw classifyHttpError(res.status, text, res.headers);
+        });
+
+        if (!content.ok && content.fallback) {
           const rest = { ...payload };
           delete rest.response_format;
           return send(rest, false);
         }
 
-        throw classifyHttpError(res.status, text, res.headers);
+        return parseJson(content.content);
       };
 
       let parsed: unknown = await send(body);
@@ -143,33 +154,41 @@ export function createOpenAiCompatibleAdapter(): AiAdapter {
           payload.dimensions = EMBEDDING_DIM;
         }
 
-        let res: Response;
-        try {
-          res = await fetch(`${root}/embeddings`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${key}`,
-              "content-type": "application/json",
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(Number(process.env.AI_TIMEOUT_MS ?? 20_000)),
-          });
-        } catch (fetchErr) {
-          throw classifyError(fetchErr);
-        }
+        const result = await aiGuard.run("embed", async () => {
+          let res: Response;
+          try {
+            res = await fetch(`${root}/embeddings`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${key}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(Number(process.env.AI_TIMEOUT_MS ?? 20_000)),
+            });
+          } catch (fetchErr) {
+            throw classifyError(fetchErr);
+          }
 
-        if (!res.ok) {
+          if (res.ok) {
+            const json = (await res.json()) as {
+              data?: { embedding: number[]; index: number }[];
+            };
+            return { ok: true as const, data: json.data ?? [] };
+          }
+
           const text = await res.text().catch(() => "");
           if (res.status === 400 && includeDimensions && EMBEDDING_DIM) {
-            return sendEmbed(false);
+            return { ok: false as const, status: 400, fallback: true as const };
           }
           throw classifyHttpError(res.status, text, res.headers);
+        });
+
+        if (!result.ok && result.fallback) {
+          return sendEmbed(false);
         }
 
-        const json = (await res.json()) as {
-          data?: { embedding: number[]; index: number }[];
-        };
-        const vectors = (json.data ?? [])
+        const vectors = result.data
           .sort((a, b) => a.index - b.index)
           .map((d) => {
             const v = d.embedding;
