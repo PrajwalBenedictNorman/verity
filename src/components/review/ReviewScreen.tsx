@@ -97,6 +97,14 @@ export function ReviewScreen({
     return Boolean(status && ["done", "skipped", "failed"].includes(status));
   }, [data.latestReview]);
 
+  async function reload() {
+    const next = await api<Payload>(`/api/submissions/${data.submission.id}`);
+    setData(next);
+    setDraft(next.submission.normalized.blocks.map((b) => b.text).join("\n\n"));
+    setError(null);
+    router.refresh();
+  }
+
   async function runReview() {
     setError(null);
     if (editing) {
@@ -107,43 +115,8 @@ export function ReviewScreen({
       });
       setEditing(false);
     }
-    const result = await api<{ reviewId: string; fast: Finding[]; deepStatus: string }>(
-      `/api/submissions/${data.submission.id}/review`,
-      { method: "POST" },
-    );
-    setData((prev) => ({
-      ...prev,
-      findings: result.fast,
-      latestReview: {
-        id: result.reviewId,
-        deepStatus: result.deepStatus,
-        score: null,
-        discarded: 0,
-        verified: [],
-        disclosure: prev.latestReview?.disclosure ?? {
-          promptVersion: "",
-          fast: { ran: true, externalCalls: 0 },
-          deep: {
-            status: result.deepStatus as Disclosure["deep"]["status"],
-            provider: null,
-            chatModel: null,
-            embeddingModel: null,
-            externalCalls: 0,
-            sentToExternal: "sentence-level excerpts only",
-            retrieval: "none",
-          },
-          dropped: 0,
-          verifiedClaims: [],
-        },
-      },
-    }));
-    router.refresh();
-  }
-
-  async function reload() {
-    const next = await api<Payload>(`/api/submissions/${data.submission.id}`);
-    setData(next);
-    router.refresh();
+    await api(`/api/submissions/${data.submission.id}/review`, { method: "POST" });
+    await reload();
   }
 
   return (
@@ -251,16 +224,24 @@ export function ReviewScreen({
             }
           }}
           onDismiss={async (id, reason) => {
-            await api(`/api/findings/${id}/dismiss`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ reason }),
-            });
-            await reload();
+            try {
+              await api(`/api/findings/${id}/dismiss`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ reason }),
+              });
+              await reload();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Dismiss failed");
+            }
           }}
           onRestore={async (id) => {
-            await api(`/api/findings/${id}/restore`, { method: "POST" });
-            await reload();
+            try {
+              await api(`/api/findings/${id}/restore`, { method: "POST" });
+              await reload();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Restore failed");
+            }
           }}
         />
       </div>
