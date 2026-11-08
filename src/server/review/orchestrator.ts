@@ -248,6 +248,7 @@ export async function runDeep(reviewId: string) {
       adapter,
       ctx,
       deadline,
+      log,
     });
     totalDiscarded += tone.discarded;
     if (tone.discarded > 0) {
@@ -289,6 +290,7 @@ export async function runDeep(reviewId: string) {
         cacheHits: ctx.cacheHits,
         sentToExternal: "sentence-level excerpts only",
         retrieval,
+        ...(tone.partial ? { partial: true } : {}),
       },
       log,
     };

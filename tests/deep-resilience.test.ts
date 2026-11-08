@@ -359,6 +359,54 @@ describe("Deep review resilience and error handling", () => {
     expect(mockFindings[0].sourceCode).toBe("AC-1");
   });
 
+  it("claims OK and tone reply is unreadable (invalid_output) -> finishes as done with partial: true and log line", async () => {
+    const mockAdapter = {
+      async embed(texts: string[]) {
+        return {
+          vectors: texts.map(() => new Array(1536).fill(0.1)),
+          provider: "mock",
+          model: "m",
+          calls: 1,
+        };
+      },
+      async complete(args: { system: string }) {
+        if (args.system.includes("Voice guideline")) {
+          throw new AiError("invalid_output", false);
+        }
+        return {
+          data: {
+            verdicts: [
+              {
+                index: 0,
+                verdict: "contradicted",
+                cited_source_code: "AC-1",
+                confidence: 0.95,
+                explanation: "Contradicts AC-1",
+                suggested_rewrite: null,
+              },
+            ],
+          },
+          provider: "mock",
+          model: "m",
+          ms: 20,
+          calls: 1,
+        };
+      },
+    };
+
+    vi.spyOn(adapterModule, "getAdapter").mockReturnValue(mockAdapter as unknown as adapterModule.AiAdapter);
+
+    await runDeep("r-1");
+
+    const review = mockReviews[0];
+    expect(review.deepStatus).toBe("done");
+    expect(review.disclosure.deep.status).toBe("done");
+    expect(review.disclosure.deep.partial).toBe(true);
+    expect(review.disclosure.log).toContain("Tone check skipped: the AI answer could not be read");
+    expect(mockFindings.length).toBeGreaterThan(0);
+    expect(mockFindings[0].sourceCode).toBe("AC-1");
+  });
+
   it("stale running review is marked interrupted by latestReview", async () => {
     process.env.AI_DEEP_STALE_MS = "1000";
     const tenSecondsAgo = new Date(Date.now() - 10_000);
