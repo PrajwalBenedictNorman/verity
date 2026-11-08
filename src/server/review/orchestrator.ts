@@ -55,6 +55,47 @@ export async function startReview(
     .limit(1);
   if (!submission) throw new Error("Submission not found");
   const doc = submission.normalized;
+  const noText = doc.blocks.length === 0 || Boolean(doc.stats?.noExtractableText);
+
+  if (noText) {
+    const disclosure = emptyDisclosure({
+      fast: { ran: true, externalCalls: 0 },
+      deep: {
+        status: "skipped",
+        provider: null,
+        chatModel: null,
+        embeddingModel: null,
+        externalCalls: 0,
+        sentToExternal: "sentence-level excerpts only",
+        retrieval: "none",
+        skipReason: "no_extractable_text",
+      },
+      dropped: 0,
+      verifiedClaims: [],
+      log: ["No text could be extracted, so nothing was checked."],
+    });
+
+    const [review] = await db
+      .insert(reviews)
+      .values({
+        submissionId,
+        fastMs: 0,
+        deepStatus: "skipped",
+        score: null,
+        finishedAt: new Date(),
+        disclosure,
+      })
+      .returning();
+
+    if (!review) throw new Error("Failed to create review");
+
+    return {
+      reviewId: review.id,
+      fast: [],
+      deepStatus: "skipped" as const,
+      fastMs: 0,
+    };
+  }
 
   const [review] = await db
     .insert(reviews)

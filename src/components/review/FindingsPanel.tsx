@@ -42,7 +42,11 @@ export function FindingsPanel({
       <div className="space-y-3">
         {open.length === 0 ? (
           <p className="text-sm text-muted">
-            {findings.length === 0 ? "Fast tier clean so far." : "No open findings."}
+            {findings.length === 0
+              ? score === null && !deepPending
+                ? "No text could be extracted, so nothing was checked."
+                : "Fast tier clean so far."
+              : "No open findings."}
           </p>
         ) : (
           open.map((finding) => (

@@ -13,7 +13,7 @@ export function ScoreBar({
     <div className="rounded-xl border border-line bg-panel p-4">
       <p className="text-sm text-muted">Score</p>
       <p className="mt-1 text-4xl font-semibold tabular-nums">
-        {value === null ? "…" : value}
+        {value === null ? (deepPending ? "…" : "Not scored") : value}
       </p>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-line">
         <div
@@ -24,7 +24,9 @@ export function ScoreBar({
       {deepPending ? (
         <p className="mt-2 text-sm text-muted">Deep checks running</p>
       ) : (
-        <p className="mt-2 text-sm">{label}</p>
+        <p className="mt-2 text-sm">
+          {label ?? (score === null ? "No text could be extracted, so nothing was checked." : null)}
+        </p>
       )}
       <p className="mt-1 text-xs text-muted">
         Ready at {SCORE_CONFIG.readyThreshold}. Questions do not change the score.
