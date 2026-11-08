@@ -2,11 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export function getStorageDir() {
-  return path.resolve(process.env.STORAGE_DIR ?? "./storage");
+  return path.resolve(/*turbopackIgnore: true*/ process.env.STORAGE_DIR ?? "./storage");
 }
 
 export async function saveStoredFile(relativePath: string, data: Buffer) {
-  const full = path.join(getStorageDir(), relativePath);
+  const full = path.join(/*turbopackIgnore: true*/ getStorageDir(), relativePath);
   await fs.mkdir(path.dirname(full), { recursive: true });
   await fs.writeFile(full, data);
   return relativePath;

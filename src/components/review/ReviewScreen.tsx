@@ -186,6 +186,14 @@ export function ReviewScreen({
     }
   }
 
+  async function reload() {
+    const next = await api<Payload>(`/api/submissions/${data.submission.id}`);
+    setData(next);
+    setDraft(blocksToText(next.submission.normalized));
+    setError(null);
+    router.refresh();
+  }
+
   async function runReview() {
     setError(null);
     if (editing) {
@@ -228,12 +236,6 @@ export function ReviewScreen({
         disclosure: freshDisclosure,
       },
     }));
-    router.refresh();
-  }
-
-  async function reload() {
-    const next = await api<Payload>(`/api/submissions/${data.submission.id}`);
-    setData(next);
     router.refresh();
   }
 
@@ -366,16 +368,24 @@ export function ReviewScreen({
             }
           }}
           onDismiss={async (id, reason) => {
-            await api(`/api/findings/${id}/dismiss`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ reason }),
-            });
-            await reload();
+            try {
+              await api(`/api/findings/${id}/dismiss`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ reason }),
+              });
+              await reload();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Dismiss failed");
+            }
           }}
           onRestore={async (id) => {
-            await api(`/api/findings/${id}/restore`, { method: "POST" });
-            await reload();
+            try {
+              await api(`/api/findings/${id}/restore`, { method: "POST" });
+              await reload();
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Restore failed");
+            }
           }}
         />
       </div>

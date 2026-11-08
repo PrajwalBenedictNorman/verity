@@ -1,10 +1,10 @@
 # Progress
 
-Last updated: 2026-11-06
+Last updated: 2026-11-07
 
 ## Status
 
-Implementation is nearly complete. Lint, typecheck, and the unit test suite pass. Two follow-up fixes remain, and the production build and database-backed eval have not yet been run.
+Code follow-ups are done. Lint, typecheck, unit tests, and `pnpm build` pass. Database migrate, seed, and eval still need a running Postgres. Docker Desktop was started, but the engine never opened `~/.docker/run/docker.sock`.
 
 ## Completed
 
@@ -74,35 +74,22 @@ Implementation is nearly complete. Lint, typecheck, and the unit test suite pass
 - Added `typecheck` and `eval` package scripts.
 - Pinned `unpdf` to the Node 20-compatible 1.x line and Vitest to 4.x.
 
+## Done in this pass
+
+- `05-spelling.txt` now uses `clents` (a one-edit miss of `clients`, GL-2.3). The short-term fuzzy guard stays in place. Fast-rules tests cover the near-miss and the `cheap`/`cheep` non-match.
+- `ReviewScreen` reloads the new review after Run review, refreshes the editor draft from normalized blocks, and surfaces dismiss/restore errors.
+- Tailwind utilities are compiled through `@tailwindcss/postcss`.
+- `pnpm test` (29), `pnpm typecheck`, `pnpm lint`, and `pnpm build` pass.
+
 ## Pending
 
-### 1. Fix the `05-spelling` eval expectation
-
-- `src/server/review/fast/glossary-match.ts:125` skips fuzzy matching for glossary terms of 6 characters or fewer.
-- `src/server/db/seed-data/testset/05-spelling.txt:3` uses `cheep` for the 5-character term `cheap`, so no finding is produced.
-- `src/server/db/seed-data/testset/expected.json:45` currently requires `GL-2.1`, so `pnpm eval` will fail case 05.
-- Recommended fix: use a longer near-miss such as `clents` for `clients` (`GL-2.3`) and add a fast-rules unit test covering fuzzy near-misses and the short-term guard.
-- Do not lower the fuzzy-match length guard without addressing false positives such as `cheat`/`heap` matching `cheap`.
-
-### 2. Fix stale review-screen state
-
-- `src/components/review/ReviewScreen.tsx:114` optimistically reuses the previous review's disclosure after starting a new review.
-- When the new review is `skipped` (AI off), polling stops, so the stale disclosure, log, and `null` score can remain until a page reload.
-- `src/components/review/ReviewScreen.tsx:143` (`reload`) updates findings/status but does not refresh the editor draft from the returned normalized document.
-- Fix: replace the optimistic state update in `runReview` with an awaited `reload()`, and update `draft` from the returned normalized blocks during `reload`.
-- Optional polish: catch dismiss/restore failures in `ReviewScreen` and clear the error on successful actions.
-
-### 3. Remaining verification
-
-- Run `pnpm build` and fix any production-build failures.
-- Run `pnpm db:migrate` and `pnpm db:seed` against a running Postgres instance.
-- Run `pnpm eval`; with AI disabled, expect all 10 fast-tier cases to pass and deep metrics to print `N/A`.
-- If AI is configured, verify the deep `AC-1` expectation for `04-claims.txt`.
+- Start Docker Desktop until `docker info` connects, then `docker compose up -d`, `pnpm db:migrate`, `pnpm db:seed`, and `pnpm eval`.
+- If AI is configured, confirm the deep `AC-1` expectation for `04-claims.txt`.
 - Do not commit unless explicitly requested.
 
 ## Known caveats
 
-- `pnpm build` and `pnpm eval` have not been run yet.
+- `pnpm build` passes. `pnpm eval` has not been run because Postgres is not reachable.
 - The deep-tier eval assertion depends on the configured external model.
 - `tests/deep-filter.test.ts` and the `requireApiUser` return-type refinement in `src/server/auth/api.ts` were present in the working tree during inspection; both are benign and tests pass.
 - No git commit has been made.
