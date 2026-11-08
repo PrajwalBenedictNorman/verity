@@ -40,10 +40,18 @@ type Payload = {
   findings: Finding[];
 };
 
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
+export const blocksToText = (d: NormalizedDocument) =>
+  d.blocks.map((b) => b.text).join("\n\n");
+
+export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
-  const json = (await res.json()) as { ok: boolean; data?: T; error?: { message: string } };
-  if (!json.ok) throw new Error(json.error?.message ?? "Request failed");
+  let json: { ok: boolean; data?: T; error?: { message: string } };
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Request failed (${res.status})`);
+  }
+  if (!json.ok) throw new Error(json.error?.message ?? `Request failed (${res.status})`);
   return json.data as T;
 }
 
@@ -71,26 +79,59 @@ export function ReviewScreen({
   useEffect(() => {
     const reviewId = data.latestReview?.id;
     if (!reviewId || !deepPending) return;
+
+    let inFlight = false;
+    let failCount = 0;
+    const startTime = Date.now();
+    const MAX_POLL_MS = 180_000;
+
     const t = setInterval(() => {
-      void api<Payload["latestReview"] & { findings: Finding[]; log: string[] }>(
+      if (inFlight) return;
+      if (Date.now() - startTime > MAX_POLL_MS) {
+        clearInterval(t);
+        setError("Deep checks are taking longer than expected. Reload to check again.");
+        return;
+      }
+
+      inFlight = true;
+      api<Payload["latestReview"] & { findings: Finding[]; log: string[] }>(
         `/api/reviews/${reviewId}`,
-      ).then((review) => {
-        if (!review) return;
-        setData((prev) => ({
-          ...prev,
-          latestReview: {
-            id: reviewId,
-            deepStatus: review.deepStatus,
-            score: review.score,
-            discarded: review.discarded,
-            verified: review.verified,
-            disclosure: review.disclosure,
-          },
-          findings: review.findings,
-        }));
-      });
+      )
+        .then((review) => {
+          failCount = 0;
+          if (!review) return;
+          setData((prev) => ({
+            ...prev,
+            latestReview: {
+              id: reviewId,
+              deepStatus: review.deepStatus,
+              score: review.score,
+              discarded: review.discarded,
+              verified: review.verified,
+              disclosure: review.disclosure,
+            },
+            findings: review.findings,
+          }));
+
+          if (["done", "failed", "skipped"].includes(review.deepStatus)) {
+            clearInterval(t);
+            void reload();
+          }
+        })
+        .catch(() => {
+          failCount += 1;
+          if (failCount >= 5) {
+            clearInterval(t);
+            setError("Lost connection. Reload to check again.");
+          }
+        })
+        .finally(() => {
+          inFlight = false;
+        });
     }, 1000);
+
     return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.latestReview?.id, deepPending]);
 
   const canSubmit = useMemo(() => {
@@ -115,7 +156,7 @@ export function ReviewScreen({
   async function retryDeepChecks() {
     setError(null);
     try {
-      await api<{ reviewId: string; deepStatus: string }>(
+      const res = await api<{ reviewId: string; deepStatus: string }>(
         `/api/submissions/${data.submission.id}/review/deep`,
         { method: "POST" },
       );
@@ -124,7 +165,17 @@ export function ReviewScreen({
         latestReview: prev.latestReview
           ? {
               ...prev.latestReview,
+              id: res.reviewId,
               deepStatus: "running",
+              disclosure: {
+                ...prev.latestReview.disclosure,
+                deep: {
+                  ...prev.latestReview.disclosure?.deep,
+                  status: "running",
+                  errorCode: undefined,
+                  errorMessage: undefined,
+                },
+              },
             }
           : null,
       }));
@@ -149,6 +200,22 @@ export function ReviewScreen({
       `/api/submissions/${data.submission.id}/review`,
       { method: "POST" },
     );
+    const freshDisclosure: Disclosure = {
+      promptVersion: "",
+      fast: { ran: true, externalCalls: 0 },
+      deep: {
+        status: result.deepStatus as Disclosure["deep"]["status"],
+        provider: null,
+        chatModel: null,
+        embeddingModel: null,
+        externalCalls: 0,
+        sentToExternal: "sentence-level excerpts only",
+        retrieval: "none",
+      },
+      dropped: 0,
+      verifiedClaims: [],
+      log: [],
+    };
     setData((prev) => ({
       ...prev,
       findings: result.fast,
@@ -158,21 +225,7 @@ export function ReviewScreen({
         score: null,
         discarded: 0,
         verified: [],
-        disclosure: prev.latestReview?.disclosure ?? {
-          promptVersion: "",
-          fast: { ran: true, externalCalls: 0 },
-          deep: {
-            status: result.deepStatus as Disclosure["deep"]["status"],
-            provider: null,
-            chatModel: null,
-            embeddingModel: null,
-            externalCalls: 0,
-            sentToExternal: "sentence-level excerpts only",
-            retrieval: "none",
-          },
-          dropped: 0,
-          verifiedClaims: [],
-        },
+        disclosure: freshDisclosure,
       },
     }));
     router.refresh();
@@ -231,7 +284,7 @@ export function ReviewScreen({
         </p>
       ) : null}
       {data.latestReview?.deepStatus === "failed" ? (
-        <div className="mb-4 rounded-md border border-error/40 bg-error/10 p-3 text-sm text-error">
+        <div role="alert" className="mb-4 rounded-md border border-error/40 bg-error/10 p-3 text-sm text-error">
           <p className="font-semibold">Deep checks failed. Fast results are shown below.</p>
           {data.latestReview.disclosure?.deep?.errorMessage ? (
             <p className="mt-1 text-sm opacity-90">
@@ -249,13 +302,16 @@ export function ReviewScreen({
           ) : null}
         </div>
       ) : null}
-      {error ? <p className="mb-3 text-sm text-error">{error}</p> : null}
+      {error ? <p role="alert" className="mb-3 text-sm text-error">{error}</p> : null}
       <div className="mb-3 flex gap-2">
         {data.submission.sourceKind === "text" && canAct ? (
           <button
             type="button"
             className="rounded-md border border-line px-3 py-1.5 text-sm"
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => {
+              if (!editing) setDraft(blocksToText(data.submission.normalized));
+              setEditing((v) => !v);
+            }}
           >
             {editing ? "Close editor" : "Edit text"}
           </button>
@@ -270,7 +326,7 @@ export function ReviewScreen({
           </button>
         ) : null}
       </div>
-      <div className="grid gap-6 min-[860px]:grid-cols-[55%_1fr]">
+      <div className="grid grid-cols-1 gap-6 min-[861px]:grid-cols-[55%_1fr]">
         <section className="rounded-xl border border-line bg-panel p-5">
           {editing ? (
             <textarea
