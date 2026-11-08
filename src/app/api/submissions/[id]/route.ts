@@ -5,7 +5,7 @@ import { forbidUnless, requireApiUser } from "@/server/auth/api";
 import { getDb } from "@/server/db/client";
 import { activityLog, findings, submissions, users } from "@/server/db/schema";
 import { normalize } from "@/server/ingest/normalize";
-import { latestReview, logActivity } from "@/server/review/orchestrator";
+import { latestReview } from "@/server/review/orchestrator";
 import { rowToFinding } from "@/server/review/map";
 import { transition } from "@/server/workflow/transitions";
 
@@ -76,32 +76,71 @@ export async function PATCH(
   try {
     const body = patchSchema.parse(await req.json());
     const db = getDb();
-    const [row] = await db.select().from(submissions).where(eq(submissions.id, id)).limit(1);
-    if (!row) return jsonError("not_found", "Submission not found", 404);
-    const denied = forbidUnless(user, "submissions.edit", row.creatorId);
-    if (denied) return denied;
-    if (row.sourceKind !== "text") {
-      return jsonError(
-        "unsupported",
-        "Edit text works on pasted text. Copy suggestions for files.",
-        409,
-      );
+
+    type TxResult =
+      | { ok: true; status: string }
+      | { ok: false; status: number; code: string; message: string; response?: Response };
+
+    const result = await db.transaction<TxResult>(async (tx) => {
+      const [row] = await tx
+        .select()
+        .from(submissions)
+        .where(eq(submissions.id, id))
+        .for("update")
+        .limit(1);
+
+      if (!row) {
+        return { ok: false, status: 404, code: "not_found", message: "Submission not found" };
+      }
+
+      const denied = forbidUnless(user, "submissions.edit", row.creatorId);
+      if (denied) {
+        return { ok: false, status: 403, code: "forbidden", message: "Forbidden", response: denied };
+      }
+
+      if (row.sourceKind !== "text") {
+        return {
+          ok: false,
+          status: 409,
+          code: "unsupported",
+          message: "Edit text works on pasted text. Copy suggestions for files.",
+        };
+      }
+
+      const nextStatus = transition(row.status, "edit_content", user.role);
+      if (!nextStatus.ok) {
+        return { ok: false, status: 403, code: "forbidden", message: nextStatus.error };
+      }
+
+      const normalized = await normalize({ kind: "text", text: body.text, filename: row.title });
+
+      await tx
+        .update(submissions)
+        .set({
+          normalized,
+          status: nextStatus.status,
+          updatedAt: new Date(),
+        })
+        .where(eq(submissions.id, id));
+
+      if (row.status === "approved" && nextStatus.status === "draft") {
+        await tx.insert(activityLog).values({
+          submissionId: id,
+          actorId: user.id,
+          action: "edit_after_approval",
+          detail: "Editing returned this to draft.",
+        });
+      }
+
+      return { ok: true, status: nextStatus.status };
+    });
+
+    if (!result.ok) {
+      if (result.response) return result.response;
+      return jsonError(result.code, result.message, result.status);
     }
-    const nextStatus = transition(row.status, "edit_content", user.role);
-    if (!nextStatus.ok) return jsonError("forbidden", nextStatus.error, 403);
-    const normalized = await normalize({ kind: "text", text: body.text, filename: row.title });
-    await db
-      .update(submissions)
-      .set({
-        normalized,
-        status: nextStatus.status,
-        updatedAt: new Date(),
-      })
-      .where(eq(submissions.id, id));
-    if (row.status === "approved" && nextStatus.status === "draft") {
-      await logActivity(id, user.id, "edit_after_approval", "Editing returned this to draft.");
-    }
-    return jsonOk({ id, status: nextStatus.status });
+
+    return jsonOk({ id, status: result.status });
   } catch (err) {
     return toErrorResponse(err);
   }

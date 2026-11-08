@@ -1,3 +1,5 @@
+import type { AiErrorCode } from "@/server/ai/errors";
+
 export type FindingKind =
   | "Terminology"
   | "Voice"
@@ -33,6 +35,13 @@ export type Disclosure = {
     externalCalls: number;
     sentToExternal: string;
     retrieval: "vector" | "keyword" | "none";
+    skipReason?: string;
+    errorCode?: AiErrorCode | "interrupted";
+    errorMessage?: string;
+    retries?: number;
+    cacheHits?: number;
+    partial?: boolean;
+    fallbackUsed?: boolean;
   };
   dropped: number;
   verifiedClaims: string[];

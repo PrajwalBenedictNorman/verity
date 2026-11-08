@@ -25,6 +25,11 @@ export async function parseImage(
         height: meta.height ?? 0,
       },
     ],
-    stats: { chars: 0, blocks: 0, images: 1 },
+    stats: {
+      chars: 0,
+      blocks: 0,
+      images: 1,
+      noExtractableText: true,
+    },
   };
 }

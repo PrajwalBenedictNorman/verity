@@ -15,7 +15,8 @@ import {
 import type { NormalizedDocument } from "../ingest/types";
 import type { Disclosure } from "../review/types";
 
-export const EMBEDDING_DIM = Number(process.env.EMBEDDING_DIM ?? 1536);
+import { EMBEDDING_DIM } from "../../lib/config";
+export { EMBEDDING_DIM };
 
 export const roleEnum = pgEnum("role", ["creator", "reviewer", "admin"]);
 export const statusEnum = pgEnum("status", [

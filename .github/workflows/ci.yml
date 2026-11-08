@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feat/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: verity
+          POSTGRES_PASSWORD: verity_password
+          POSTGRES_DB: verity
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgres://verity:verity_password@localhost:5432/verity
+      NEXTAUTH_SECRET: test-secret-super-long-random-string-12345
+      NEXTAUTH_URL: http://localhost:3000
+      SEED_USER_PASSWORD: password123
+      AI_ENABLED: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Run unit & integration tests
+        run: pnpm test
+
+      - name: Database migrations
+        run: pnpm db:migrate
+
+      - name: Database seed
+        run: pnpm db:seed
+
+      - name: Build Next.js application
+        run: pnpm build

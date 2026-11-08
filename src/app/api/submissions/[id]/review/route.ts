@@ -5,6 +5,8 @@ import { getDb } from "@/server/db/client";
 import { submissions } from "@/server/db/schema";
 import { logActivity, startReview } from "@/server/review/orchestrator";
 
+import { checkUserReviewRateLimit } from "@/lib/rate-limit";
+
 export const dynamic = "force-dynamic";
 
 export async function POST(
@@ -20,6 +22,9 @@ export async function POST(
     if (!row) return jsonError("not_found", "Submission not found", 404);
     const denied = forbidUnless(user, "submissions.review", row.creatorId);
     if (denied) return denied;
+    if (!checkUserReviewRateLimit(user.id)) {
+      return jsonError("rate_limited", "Too many review requests. Please wait a moment.", 429);
+    }
     const result = await startReview(id);
     await logActivity(id, user.id, "review_started", `Review ${result.reviewId} started`);
     return jsonOk({

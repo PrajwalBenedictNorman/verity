@@ -15,6 +15,7 @@ export function FindingsPanel({
   onRestore,
   verified,
   canAct,
+  busy = false,
 }: {
   findings: Finding[];
   score: number | null;
@@ -26,6 +27,7 @@ export function FindingsPanel({
   onRestore: (id: string) => Promise<void>;
   verified: string[];
   canAct: boolean;
+  busy?: boolean;
 }) {
   const open = findings.filter((f) => f.state === "open");
   const dismissed = findings.filter((f) => f.state === "dismissed");
@@ -40,7 +42,11 @@ export function FindingsPanel({
       <div className="space-y-3">
         {open.length === 0 ? (
           <p className="text-sm text-muted">
-            {findings.length === 0 ? "Fast tier clean so far." : "No open findings."}
+            {findings.length === 0
+              ? score === null && !deepPending
+                ? "No text could be extracted, so nothing was checked."
+                : "Fast tier clean so far."
+              : "No open findings."}
           </p>
         ) : (
           open.map((finding) => (
@@ -52,6 +58,7 @@ export function FindingsPanel({
               onApply={() => onApply(finding.id)}
               onDismiss={(reason) => onDismiss(finding.id, reason)}
               canAct={canAct}
+              busy={busy}
             />
           ))
         )}

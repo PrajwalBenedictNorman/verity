@@ -37,8 +37,14 @@ export async function PATCH(
       )
       .returning();
     if (!row) return jsonError("not_found", "Claim not found", 404);
-    if (body.text) await embedClaim(row.id, row.text);
-    return jsonOk(row);
+    let warning: string | undefined;
+    if (body.text) {
+      const embedded = await embedClaim(row.id, row.text);
+      if (!embedded) {
+        warning = "Saved, but embedding failed. Claim matching will use keyword search.";
+      }
+    }
+    return jsonOk({ ...row, warning });
   } catch (err) {
     return toErrorResponse(err);
   }
