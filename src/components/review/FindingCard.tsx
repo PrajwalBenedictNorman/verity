@@ -23,6 +23,7 @@ export function FindingCard({
   onApply,
   onDismiss,
   canAct,
+  busy: externalBusy = false,
 }: {
   finding: Finding;
   selected: boolean;
@@ -30,10 +31,12 @@ export function FindingCard({
   onApply: () => Promise<void>;
   onDismiss: (reason: string) => Promise<void>;
   canAct: boolean;
+  busy?: boolean;
 }) {
   const [reason, setReason] = useState("");
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const isBusy = busy || externalBusy;
 
   return (
     <article
@@ -74,7 +77,7 @@ export function FindingCard({
             <button
               type="button"
               className="rounded-md bg-brand px-3 py-1.5 text-sm text-white disabled:opacity-50"
-              disabled={busy}
+              disabled={isBusy}
               onClick={(e) => {
                 e.stopPropagation();
                 setBusy(true);
@@ -87,7 +90,8 @@ export function FindingCard({
           {!open ? (
             <button
               type="button"
-              className="rounded-md border border-line px-3 py-1.5 text-sm"
+              className="rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50"
+              disabled={isBusy}
               onClick={(e) => {
                 e.stopPropagation();
                 setOpen(true);
@@ -106,7 +110,7 @@ export function FindingCard({
               <button
                 type="button"
                 className="self-start rounded-md border border-line px-3 py-1.5 text-sm disabled:opacity-50"
-                disabled={reason.trim().length < 3 || busy}
+                disabled={reason.trim().length < 3 || isBusy}
                 onClick={() => {
                   setBusy(true);
                   void onDismiss(reason.trim()).finally(() => setBusy(false));

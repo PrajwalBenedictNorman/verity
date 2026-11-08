@@ -60,6 +60,7 @@ export function ReviewScreen({
   const [data, setData] = useState(initial);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [draft, setDraft] = useState(
     initial.submission.normalized.blocks.map((b) => b.text).join("\n\n"),
   );
@@ -224,7 +225,9 @@ export function ReviewScreen({
       <StatusFlow status={data.submission.status} />
       {data.latestReview?.deepStatus === "skipped" ? (
         <p className="mb-4 rounded-md border border-line bg-panel px-3 py-2 text-sm">
-          Deep checks off: external AI disabled
+          {data.latestReview.disclosure?.deep?.skipReason === "not_rerun_after_edit"
+            ? "Deep checks were not re-run after this edit. Click Run review to re-check."
+            : "Deep checks off: external AI disabled"}
         </p>
       ) : null}
       {data.latestReview?.deepStatus === "failed" ? (
@@ -292,12 +295,18 @@ export function ReviewScreen({
           onSelect={setSelectedId}
           verified={data.latestReview?.verified ?? []}
           canAct={canAct}
+          busy={applying || editing}
           onApply={async (id) => {
+            if (applying) return;
+            setApplying(true);
             try {
               await api(`/api/findings/${id}/apply`, { method: "POST" });
               await reload();
             } catch (e) {
               setError(e instanceof Error ? e.message : "Apply failed");
+              await reload();
+            } finally {
+              setApplying(false);
             }
           }}
           onDismiss={async (id, reason) => {

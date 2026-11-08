@@ -35,6 +35,7 @@ export type Disclosure = {
     externalCalls: number;
     sentToExternal: string;
     retrieval: "vector" | "keyword" | "none";
+    skipReason?: string;
     errorCode?: AiErrorCode | "interrupted";
     errorMessage?: string;
     retries?: number;

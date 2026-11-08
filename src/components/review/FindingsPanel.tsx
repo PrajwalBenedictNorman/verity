@@ -15,6 +15,7 @@ export function FindingsPanel({
   onRestore,
   verified,
   canAct,
+  busy = false,
 }: {
   findings: Finding[];
   score: number | null;
@@ -26,6 +27,7 @@ export function FindingsPanel({
   onRestore: (id: string) => Promise<void>;
   verified: string[];
   canAct: boolean;
+  busy?: boolean;
 }) {
   const open = findings.filter((f) => f.state === "open");
   const dismissed = findings.filter((f) => f.state === "dismissed");
@@ -52,6 +54,7 @@ export function FindingsPanel({
               onApply={() => onApply(finding.id)}
               onDismiss={(reason) => onDismiss(finding.id, reason)}
               canAct={canAct}
+              busy={busy}
             />
           ))
         )}

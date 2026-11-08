@@ -45,7 +45,7 @@ function emptyDisclosure(partial: Partial<Disclosure> = {}): Disclosure {
 
 export async function startReview(
   submissionId: string,
-  opts: { waitForDeep?: boolean } = {},
+  opts: { waitForDeep?: boolean; fastOnly?: boolean; skipReason?: string } = {},
 ) {
   const db = getDb();
   const [submission] = await db
@@ -77,7 +77,11 @@ export async function startReview(
     );
   }
 
-  const aiOn = aiConfigured();
+  const aiOn = aiConfigured() && !opts.fastOnly;
+  const skipReason = aiOn
+    ? undefined
+    : (opts.skipReason ?? (opts.fastOnly ? "not_rerun_after_edit" : undefined));
+
   const disclosure = emptyDisclosure({
     fast: { ran: true, externalCalls: 0 },
     deep: {
@@ -88,6 +92,7 @@ export async function startReview(
       externalCalls: 0,
       sentToExternal: "sentence-level excerpts only",
       retrieval: "none",
+      ...(skipReason ? { skipReason } : {}),
     },
     dropped: 0,
     verifiedClaims: [],
@@ -97,7 +102,11 @@ export async function startReview(
         ? [
             "Deep checks running. Excerpts of the submitted text will be sent to the configured provider.",
           ]
-        : ["Deep checks off: external AI disabled"]),
+        : [
+            skipReason === "not_rerun_after_edit"
+              ? "Deep checks were not re-run after this edit. Click Run review to re-check."
+              : "Deep checks off: external AI disabled",
+          ]),
       ...fast.log,
     ],
   });
