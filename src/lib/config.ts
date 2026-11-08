@@ -8,3 +8,6 @@ export const RETRIEVAL_MIN_SIM = Number(process.env.RETRIEVAL_MIN_SIM ?? 0.3);
 export const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS ?? 30_000);
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024;
 export const MAX_INPUT_CHARS = 100_000;
+
+export const CLAIMS_POLICY_CODE = process.env.CLAIMS_POLICY_CODE ?? "GL-4.2";
+export const STYLE_VOICE_CODE = process.env.STYLE_VOICE_CODE ?? "GL-3.1";

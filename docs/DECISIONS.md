@@ -17,3 +17,4 @@
 - Binary fixtures for parser tests and the eval testset are committed because they are small and keep tests deterministic.
 - Database-backed response cache (T9) was deferred in favor of claim & tone batching (T4) and pre-embedding. Batching reduced call volume by ~85% (from 27 calls to 3 calls on the demo submission) without requiring cache invalidation complexity or extra database migrations across brand rule edits. The "Retry deep checks" endpoint and UI button were implemented to allow instant recovery from rate limits, timeouts, or transient outages.
 - Images are stored and shown but not checked unless vision is enabled.
+- Single brand per deployment: guideline and claims policy codes (GL-4.2, GL-3.1) are configurable via CLAIMS_POLICY_CODE and STYLE_VOICE_CODE environment variables; dynamic multi-brand tenancy is future architectural work.

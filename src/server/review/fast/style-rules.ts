@@ -1,3 +1,4 @@
+import { STYLE_VOICE_CODE } from "@/lib/config";
 import type { Block } from "@/server/ingest/types";
 import type { Finding } from "../types";
 import type { SectionRef } from "./glossary-match";
@@ -27,9 +28,9 @@ export function runStyleRules(
   sections: SectionRef[],
   skipped: string[],
 ): Finding[] {
-  const voice = cite("GL-3.1", sections);
+  const voice = cite(STYLE_VOICE_CODE, sections);
   if (!voice) {
-    skipped.push("Style rule skipped: GL-3.1 not found in brand guidelines.");
+    skipped.push(`Style rule skipped: ${STYLE_VOICE_CODE} not found in brand guidelines.`);
     return [];
   }
   const findings: Finding[] = [];

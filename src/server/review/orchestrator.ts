@@ -11,6 +11,7 @@ import {
 import { aiConfigured, getAdapter } from "@/server/ai/adapter";
 import { AiError, userMessageFor } from "@/server/ai/errors";
 import { logger } from "@/lib/logger";
+import { CLAIMS_POLICY_CODE } from "@/lib/config";
 import { runFastTier } from "./fast/rules";
 import { analyseTone } from "./deep/tone";
 import { verifyClaims } from "./deep/claims";
@@ -214,7 +215,7 @@ export async function runDeep(reviewId: string) {
         .from(approvedClaims)
         .where(eq(approvedClaims.brandId, submission.brandId)),
     ]);
-    const claimsPolicy = sections.find((s) => s.code === "GL-4.2") ?? null;
+    const claimsPolicy = sections.find((s) => s.code === CLAIMS_POLICY_CODE) ?? null;
     const voiceSections = sections
       .filter((s) => s.category === "Voice")
       .map((s) => ({ code: s.code, body: s.body }));

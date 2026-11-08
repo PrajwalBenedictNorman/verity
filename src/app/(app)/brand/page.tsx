@@ -6,6 +6,7 @@ import { getDb } from "@/server/db/client";
 import {
   approvedClaims,
   brandColours,
+  brands,
   glossaryTerms,
   guidelineSections,
 } from "@/server/db/schema";
@@ -25,7 +26,9 @@ export default async function BrandPage() {
     : false;
 
   const db = getDb();
-  const brandId = brandSeed.id;
+  const [brandRow] = await db.select().from(brands).limit(1);
+  const brandId = brandRow?.id ?? brandSeed.id;
+  const brandName = brandRow?.name ?? brandSeed.name;
   const [sections, glossary, claims, colours] = await Promise.all([
     db.select().from(guidelineSections).where(eq(guidelineSections.brandId, brandId)),
     db.select().from(glossaryTerms).where(eq(glossaryTerms.brandId, brandId)),
@@ -36,7 +39,7 @@ export default async function BrandPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">Brand rules · {brandSeed.name}</h1>
+        <h1 className="text-xl font-semibold">Brand rules · {brandName}</h1>
         <p className="mt-1 text-sm text-muted">
           {canEdit
             ? "Admins can add and delete rules. Existing rules are edited in the seed file."
