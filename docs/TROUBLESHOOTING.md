@@ -53,6 +53,9 @@ This guide covers common diagnostic patterns, error codes, and operational fixes
   ```
   If changing `EMBEDDING_DIM`, update migrations or recreate the column, then run `pnpm db:embed`.
 
+### Using a Hosted Database
+Hosted cloud databases (e.g., Neon) introduce significant network latency (~2.3 s per query, leading to ~8 s fast review response times). For development, automated tests, and live demonstrations, use the local Docker Postgres instance (`postgres://verity:verity@127.0.0.1:5432/verity`) to achieve sub-second review feedback and avoid IPv6 resolution delays.
+
 ---
 
 ## 3. AI Error Codes (`AiErrorCode`)
